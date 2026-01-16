@@ -7,6 +7,10 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { AuthModule } from "./modules/auth/auth.module";
 import { HealthModule } from "./modules/health/health.module";
 import { EmailModule } from "./modules/email/email.module";
+import { LeaguesModule } from "./modules/leagues/leagues.module";
+import { MatchesModule } from "./modules/matches/matches.module";
+import { MatchSyncModule } from "./modules/match-sync/match-sync.module";
+import { TipsModule } from "./modules/tips/tips.module";
 import { AuditLog } from "./common/entities/audit-log.entity";
 import { UserInvite } from "./common/entities/user-invite.entity";
 import { TemporarySession } from "./common/entities/temporary-session.entity";
@@ -109,6 +113,10 @@ import { EnvironmentValidationService } from "./common/services/environment-vali
     AuthModule,
     HealthModule,
     EmailModule,
+    LeaguesModule,
+    MatchesModule,
+    MatchSyncModule,
+    TipsModule,
   ],
   controllers: [AppController],
   providers: [AppService, RateLimitingService, EnvironmentValidationService],
