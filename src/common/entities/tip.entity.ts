@@ -7,8 +7,10 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  OneToMany,
 } from "typeorm";
 import { Tipster } from "./tipster.entity";
+import { TipSelection } from "./tip-selection.entity";
 import { TipStatusType } from "../enums/tip-status-type.enum";
 
 @Entity("tips")
@@ -30,6 +32,9 @@ export class Tip {
     foreignKeyConstraintName: "fk_tips_tipster",
   })
   tipster: Tipster;
+
+  @OneToMany(() => TipSelection, (selection) => selection.tip)
+  selections?: TipSelection[];
 
   @Column({ name: "is_ai", type: "boolean", nullable: false, default: false })
   isAi: boolean;
