@@ -1,0 +1,38 @@
+config:
+  target: 'http://localhost:3002'
+  phases:
+    # Normal load
+    - duration: 60
+      arrivalRate: 20
+      name: 'Normal load'
+    # Sudden spike
+    - duration: 30
+      arrivalRate: 200
+      name: 'Spike load'
+    # Back to normal
+    - duration: 60
+      arrivalRate: 20
+      name: 'Recovery'
+  defaults:
+    headers:
+      Content-Type: 'application/json'
+      Accept: 'application/json'
+
+scenarios:
+  - name: 'Spike Test'
+    flow:
+      - get:
+          url: '/'
+          name: 'Health Check'
+      - get:
+          url: '/resources/countries'
+          name: 'Get Countries'
+      - get:
+          url: '/products'
+          name: 'Get Products'
+      - post:
+          url: '/auth/login'
+          name: 'Login Attempt'
+          json:
+            email: 'testuser@example.com'
+            password: 'TestPassword123!'

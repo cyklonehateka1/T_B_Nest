@@ -1,0 +1,21 @@
+{
+  "name": "tipster-stress-tests",
+  "version": "1.0.0",
+  "description": "Stress testing suite for Tipster Betting Backend",
+  "scripts": {
+    "test:basic": "npx artillery run artillery-config.yml",
+    "test:quick": "npx artillery quick --count 100 --num 10 http://localhost:3002/",
+    "test:spike": "npx artillery run artillery-spike-test.yml",
+    "test:soak": "npx artillery run artillery-soak-test.yml",
+    "test:all": "npm run test:basic && npm run test:spike",
+    "test:ab": "./ab-tests.sh",
+    "test:monitor": "./monitor.sh"
+  },
+  "dependencies": {
+    "artillery": "^2.0.25"
+  },
+  "main": "k6-load-test.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
