@@ -54,6 +54,9 @@ export class TipResponseDto {
   @ApiProperty({ example: "2024-01-10T08:00:00Z" })
   createdAt: Date;
 
+  @ApiProperty({ example: true, required: false })
+  isPublished?: boolean;
+
   @ApiProperty({ type: TipsterBasicInfoDto, required: false })
   tipster?: TipsterBasicInfoDto | null;
 }

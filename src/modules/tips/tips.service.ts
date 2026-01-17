@@ -35,6 +35,7 @@ import { TipSelection } from "../../common/entities/tip-selection.entity";
 import { MatchData } from "../../common/entities/match-data.entity";
 import { User } from "../../common/entities/user.entity";
 import { PredictionType } from "../../common/enums/prediction-type.enum";
+import { AppSettings } from "../../common/entities/app-settings.entity";
 
 @Injectable()
 export class TipsService {
@@ -54,6 +55,8 @@ export class TipsService {
     private readonly matchRepository: Repository<MatchData>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(AppSettings)
+    private readonly appSettingsRepository: Repository<AppSettings>,
     private readonly dataSource: DataSource
   ) {}
 
@@ -181,6 +184,7 @@ export class TipsService {
     response.publishedAt = tip.publishedAt || null;
     response.earliestMatchDate = tip.earliestMatchDate || null;
     response.createdAt = tip.createdAt;
+    response.isPublished = tip.isPublished;
 
     // Map tipster info
     if (tip.tipster) {
@@ -1145,59 +1149,180 @@ export class TipsService {
         }
       );
 
+      // Define mutually exclusive types (only one can exist per match)
+      const mutuallyExclusiveTypes = [
+        PredictionType.MATCH_RESULT,
+        PredictionType.DOUBLE_CHANCE,
+        PredictionType.HANDICAP,
+      ];
+
+      const isMutuallyExclusiveType =
+        mutuallyExclusiveTypes.includes(predictionType);
+
       // 10. Handle mutual exclusivity (match_result, double_chance, handicap)
-      if (predictionType === PredictionType.MATCH_RESULT) {
-        // Remove any double_chance or handicap selections for this match
-        await queryRunner.manager.delete(TipSelection, {
-          tip: { id: tipId },
-          match: { id: addSelectionDto.matchId },
-          predictionType: In([
-            PredictionType.DOUBLE_CHANCE,
-            PredictionType.HANDICAP,
-          ]),
-        });
-      } else if (predictionType === PredictionType.DOUBLE_CHANCE) {
-        // Remove any match_result or handicap selections for this match
-        await queryRunner.manager.delete(TipSelection, {
-          tip: { id: tipId },
-          match: { id: addSelectionDto.matchId },
-          predictionType: In([
-            PredictionType.MATCH_RESULT,
-            PredictionType.HANDICAP,
-          ]),
-        });
-      } else if (predictionType === PredictionType.HANDICAP) {
-        // Remove any match_result or double_chance selections for this match
-        await queryRunner.manager.delete(TipSelection, {
-          tip: { id: tipId },
-          match: { id: addSelectionDto.matchId },
-          predictionType: In([
-            PredictionType.MATCH_RESULT,
-            PredictionType.DOUBLE_CHANCE,
-          ]),
-        });
+      // For these types, UPDATE the existing selection instead of deleting and creating
+      let selectionToUpdate: TipSelection | null = null;
+
+      if (isMutuallyExclusiveType) {
+        // Check if there's an existing selection of any mutually exclusive type for this match
+        const existingMutuallyExclusiveSelection =
+          await queryRunner.manager.findOne(TipSelection, {
+            where: {
+              tip: { id: tipId },
+              match: { id: addSelectionDto.matchId },
+              predictionType: In(mutuallyExclusiveTypes),
+            },
+          });
+
+        if (existingMutuallyExclusiveSelection) {
+          // If it's the same selection (same type and value), we'll handle it below
+          // If it's a different mutually exclusive type, UPDATE it instead of deleting
+          if (
+            existingMutuallyExclusiveSelection.predictionType ===
+              predictionType &&
+            existingMutuallyExclusiveSelection.predictionValue ===
+              predictionValue
+          ) {
+            // Same selection - check if it's the exact same (will be handled by existingSelection check below)
+            selectionToUpdate = existingMutuallyExclusiveSelection;
+          } else {
+            // Different mutually exclusive type - UPDATE it with new type and value
+            selectionToUpdate = existingMutuallyExclusiveSelection;
+          }
+        }
       }
 
-      // 11. Remove any existing selection of the same betType for this match (to replace it)
+      // 11. Handle existing selection with same match, type, and value
       if (existingSelection) {
-        // Delete by ID to ensure it's fully removed
+        // Same selection already exists - delete it (deselecting)
         await queryRunner.manager.delete(TipSelection, {
           id: existingSelection.id,
         });
-      } else {
-        // Check if we're at the max selections limit
-        const currentSelectionsCount = await queryRunner.manager.count(
-          TipSelection,
-          {
-            where: { tip: { id: tipId } },
+
+        // Recalculate total odds after deletion
+        const allSelections = await queryRunner.manager.find(TipSelection, {
+          where: { tip: { id: tipId } },
+          relations: ["match"],
+        });
+
+        let totalOdds = 1.0;
+        let earliestMatchDate: Date | null = null;
+
+        for (const sel of allSelections) {
+          if (sel.odds && sel.odds >= 1.0) {
+            totalOdds *= sel.odds;
           }
+          if (sel.match && sel.match.matchDatetime) {
+            if (
+              !earliestMatchDate ||
+              sel.match.matchDatetime < earliestMatchDate
+            ) {
+              earliestMatchDate = sel.match.matchDatetime;
+            }
+          }
+        }
+
+        await queryRunner.manager.query(
+          `UPDATE tips 
+           SET total_odds = $1, earliest_match_date = $2, updated_at = NOW()
+           WHERE id = $3::uuid`,
+          [totalOdds > 1.0 ? totalOdds : null, earliestMatchDate || null, tipId]
         );
 
-        if (currentSelectionsCount >= TipsService.MAX_SELECTIONS) {
-          throw new BadRequestException(
-            `Maximum ${TipsService.MAX_SELECTIONS} selections allowed per tip`
+        await queryRunner.commitTransaction();
+
+        // Return updated tip
+        const tipWithRelations = await this.tipRepository.findOne({
+          where: { id: tipId },
+          relations: ["tipster", "tipster.user"],
+        });
+
+        if (!tipWithRelations) {
+          throw new InternalServerErrorException(
+            "Failed to retrieve updated tip"
           );
         }
+
+        return this.mapToResponse(tipWithRelations);
+      }
+
+      // 12. If we have a selection to update (mutually exclusive type switching)
+      if (selectionToUpdate) {
+        // UPDATE the existing selection with new values
+        await queryRunner.manager.query(
+          `UPDATE tip_selections 
+           SET prediction_type = $1::prediction_type, 
+               prediction_value = $2, 
+               odds = $3, 
+               updated_at = NOW()
+           WHERE id = $4::uuid`,
+          [
+            predictionType,
+            predictionValue,
+            addSelectionDto.odds ?? null,
+            selectionToUpdate.id,
+          ]
+        );
+
+        // Recalculate total odds
+        const allSelections = await queryRunner.manager.find(TipSelection, {
+          where: { tip: { id: tipId } },
+          relations: ["match"],
+        });
+
+        let totalOdds = 1.0;
+        let earliestMatchDate: Date | null = null;
+
+        for (const sel of allSelections) {
+          if (sel.odds && sel.odds >= 1.0) {
+            totalOdds *= sel.odds;
+          }
+          if (sel.match && sel.match.matchDatetime) {
+            if (
+              !earliestMatchDate ||
+              sel.match.matchDatetime < earliestMatchDate
+            ) {
+              earliestMatchDate = sel.match.matchDatetime;
+            }
+          }
+        }
+
+        await queryRunner.manager.query(
+          `UPDATE tips 
+           SET total_odds = $1, earliest_match_date = $2, updated_at = NOW()
+           WHERE id = $3::uuid`,
+          [totalOdds > 1.0 ? totalOdds : null, earliestMatchDate || null, tipId]
+        );
+
+        await queryRunner.commitTransaction();
+
+        // Return updated tip
+        const tipWithRelations = await this.tipRepository.findOne({
+          where: { id: tipId },
+          relations: ["tipster", "tipster.user"],
+        });
+
+        if (!tipWithRelations) {
+          throw new InternalServerErrorException(
+            "Failed to retrieve updated tip"
+          );
+        }
+
+        return this.mapToResponse(tipWithRelations);
+      }
+
+      // 13. Check if we're at the max selections limit (only for new selections)
+      const currentSelectionsCount = await queryRunner.manager.count(
+        TipSelection,
+        {
+          where: { tip: { id: tipId } },
+        }
+      );
+
+      if (currentSelectionsCount >= TipsService.MAX_SELECTIONS) {
+        throw new BadRequestException(
+          `Maximum ${TipsService.MAX_SELECTIONS} selections allowed per tip`
+        );
       }
 
       // 12. Create or update selection
@@ -1455,6 +1580,243 @@ export class TipsService {
       }
 
       throw new InternalServerErrorException("Failed to remove selection");
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Publish a tip (make it available for purchase)
+   * Performs comprehensive validations before publishing:
+   * - User must be a tipster
+   * - Tip must belong to the user
+   * - Tip must not already be published
+   * - Tip must have at least one selection
+   * - All matches must be at least 12 hours before their start time
+   * - Price must pass min-max validation
+   * - Free tips must be enabled if price is 0
+   * - Title must be set and valid
+   * - All matches must be scheduled and not started
+   */
+  async publishTip(tipId: string, userId: string): Promise<TipResponseDto> {
+    this.logger.debug(`Publishing tip ${tipId} by user ${userId}`);
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 1. Validate user exists and is active
+      const user = await queryRunner.manager.findOne(User, {
+        where: { id: userId },
+      });
+
+      if (!user || !user.isActive) {
+        throw new NotFoundException("User not found or inactive");
+      }
+
+      // 2. Validate user has TIPSTER role
+      const userRoles = await queryRunner.manager
+        .createQueryBuilder()
+        .from("user_roles", "ur")
+        .where("ur.user_id = :userId", { userId })
+        .getRawMany();
+
+      const roles = userRoles.map((ur) => ur.role);
+      const hasTipsterRole = roles.includes("TIPSTER");
+
+      if (!hasTipsterRole) {
+        this.logger.warn(
+          `User ${userId} attempted to publish tip without TIPSTER role`
+        );
+        throw new ForbiddenException("Only tipsters can publish tips");
+      }
+
+      // 3. Get tip with tipster relation
+      const tip = await queryRunner.manager.findOne(Tip, {
+        where: { id: tipId },
+        relations: ["tipster", "tipster.user"],
+      });
+
+      if (!tip) {
+        throw new NotFoundException(`Tip not found: ${tipId}`);
+      }
+
+      // 4. Verify tip belongs to the user
+      if (tip.tipster.user?.id !== userId) {
+        throw new ForbiddenException("You can only publish your own tips");
+      }
+
+      // 5. Verify tip is not already published
+      if (tip.isPublished) {
+        throw new BadRequestException(
+          "Tip is already published and available for purchase"
+        );
+      }
+
+      // 6. Validate title is set and not empty
+      if (!tip.title || tip.title.trim().length === 0) {
+        throw new BadRequestException("Tip title is required");
+      }
+
+      if (tip.title.trim().length > 255) {
+        throw new BadRequestException(
+          "Tip title must not exceed 255 characters"
+        );
+      }
+
+      // 7. Get app settings for validation
+      const appSettings = await queryRunner.manager.findOne(AppSettings, {
+        where: { isActive: true },
+        order: { updatedAt: "DESC" },
+      });
+
+      const minPrice = appSettings
+        ? parseFloat(appSettings.tipMinPrice.toString())
+        : TipsService.MIN_PRICE;
+      const maxPrice = appSettings
+        ? parseFloat(appSettings.tipMaxPrice.toString())
+        : TipsService.MAX_PRICE;
+      const enableFreeTips = appSettings ? appSettings.enableFreeTips : true;
+
+      // 8. Validate price
+      if (tip.price < 0) {
+        throw new BadRequestException("Price must be at least 0");
+      }
+
+      if (tip.price > 0 && tip.price < minPrice) {
+        throw new BadRequestException(
+          `Price must be at least ${minPrice} USD for paid tips, or 0 for free tips`
+        );
+      }
+
+      if (tip.price > maxPrice) {
+        throw new BadRequestException(`Price must not exceed ${maxPrice} USD`);
+      }
+
+      // 9. Validate free tips are enabled if price is 0
+      if (tip.price === 0 && !enableFreeTips) {
+        throw new BadRequestException(
+          "Free tips are currently disabled. Please set a price for your tip."
+        );
+      }
+
+      // 10. Get all selections for the tip
+      const selections = await queryRunner.manager.find(TipSelection, {
+        where: { tip: { id: tipId } },
+        relations: ["match"],
+      });
+
+      // 11. Validate at least one selection exists
+      if (!selections || selections.length === 0) {
+        throw new BadRequestException(
+          "Cannot publish tip: at least one selection is required"
+        );
+      }
+
+      // 12. Validate all matches exist and are scheduled
+      const matchIds = selections.map((s) => s.match.id);
+      const uniqueMatchIds = [...new Set(matchIds)];
+
+      const matches = await queryRunner.manager.find(MatchData, {
+        where: uniqueMatchIds.map((id) => ({ id })),
+      });
+
+      if (matches.length !== uniqueMatchIds.length) {
+        const foundIds = new Set(matches.map((m) => m.id));
+        const missingIds = uniqueMatchIds.filter((id) => !foundIds.has(id));
+        throw new NotFoundException(
+          `Matches not found: ${missingIds.join(", ")}`
+        );
+      }
+
+      // 13. Validate 12-hour rule: all matches must be at least 12 hours before their start time
+      const now = new Date();
+      const twelveHoursInMs = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
+
+      const invalidMatches: Array<{ matchId: string; matchDatetime: Date }> =
+        [];
+
+      for (const match of matches) {
+        // Check if match is scheduled
+        if (match.status !== MatchStatusType.scheduled) {
+          throw new BadRequestException(
+            `Cannot publish tip: match ${match.id} is not scheduled (status: ${match.status})`
+          );
+        }
+
+        // Check if match has already started
+        if (match.matchDatetime <= now) {
+          throw new BadRequestException(
+            `Cannot publish tip: match ${match.id} has already started`
+          );
+        }
+
+        // Check 12-hour rule: match must be at least 12 hours in the future
+        const timeUntilMatch = match.matchDatetime.getTime() - now.getTime();
+        if (timeUntilMatch < twelveHoursInMs) {
+          invalidMatches.push({
+            matchId: match.id,
+            matchDatetime: match.matchDatetime,
+          });
+        }
+      }
+
+      if (invalidMatches.length > 0) {
+        const matchDetails = invalidMatches
+          .map(
+            (m) =>
+              `match ${m.matchId} (starts at ${m.matchDatetime.toISOString()})`
+          )
+          .join(", ");
+        throw new BadRequestException(
+          `Cannot publish tip: ${invalidMatches.length} match(es) are less than 12 hours before their start time: ${matchDetails}`
+        );
+      }
+
+      // 14. Update tip to published status
+      tip.isPublished = true;
+      tip.publishedAt = new Date();
+      tip.status = TipStatusType.PENDING; // Ensure status is PENDING when published
+
+      // 15. Save updated tip
+      const publishedTip = await queryRunner.manager.save(Tip, tip);
+
+      // 16. Commit transaction
+      await queryRunner.commitTransaction();
+
+      this.logger.log(
+        `Successfully published tip ${tipId} by user ${userId} with ${selections.length} selections`
+      );
+
+      // 17. Load tip with relations for response
+      const tipWithRelations = await this.tipRepository.findOne({
+        where: { id: publishedTip.id },
+        relations: ["tipster", "tipster.user"],
+      });
+
+      if (!tipWithRelations) {
+        throw new InternalServerErrorException(
+          "Failed to retrieve published tip"
+        );
+      }
+
+      return this.mapToResponse(tipWithRelations);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error(`Error publishing tip: ${error.message}`, error.stack);
+
+      // Re-throw known exceptions
+      if (
+        error instanceof BadRequestException ||
+        error instanceof ForbiddenException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+
+      // Wrap unknown errors
+      throw new InternalServerErrorException("Failed to publish tip");
     } finally {
       await queryRunner.release();
     }
