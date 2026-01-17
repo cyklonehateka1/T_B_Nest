@@ -1,7 +1,7 @@
 export enum TipStatusType {
-  PENDING = "PENDING",
-  WON = "WON",
-  LOST = "LOST",
-  VOID = "VOID",
-  CANCELLED = "CANCELLED",
+  PENDING = "pending",
+  WON = "won",
+  LOST = "lost",
+  VOID = "void",
+  CANCELLED = "cancelled",
 }

@@ -28,14 +28,15 @@ import { UpdateTipDto } from "./dto/update-tip.dto";
 import { AddSelectionDto } from "./dto/add-selection.dto";
 import { Tipster } from "../../common/entities/tipster.entity";
 import { TipSelection } from "../../common/entities/tip-selection.entity";
-import { Match } from "../../common/entities/match.entity";
+import { MatchData } from "../../common/entities/match-data.entity";
 import { User } from "../../common/entities/user.entity";
 import { PredictionType } from "../../common/enums/prediction-type.enum";
 
 @Injectable()
 export class TipsService {
   private readonly logger = new Logger(TipsService.name);
-  private static readonly MIN_PRICE = 5.0; // Minimum price for paid tips (from database constraint)
+  private static readonly MIN_PRICE = 1.0; // Minimum price for paid tips
+  private static readonly MAX_PRICE = 100.0; // Maximum price for tips (USD)
   private static readonly MAX_SELECTIONS = 50; // Maximum number of selections per tip (prevent abuse)
 
   constructor(
@@ -45,8 +46,8 @@ export class TipsService {
     private readonly tipsterRepository: Repository<Tipster>,
     @InjectRepository(TipSelection)
     private readonly tipSelectionRepository: Repository<TipSelection>,
-    @InjectRepository(Match)
-    private readonly matchRepository: Repository<Match>,
+    @InjectRepository(MatchData)
+    private readonly matchRepository: Repository<MatchData>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly dataSource: DataSource
@@ -106,9 +107,12 @@ export class TipsService {
     // Status filter
     if (status && status.trim() !== "") {
       try {
-        const statusEnum = TipStatusType[status.toUpperCase() as keyof typeof TipStatusType];
+        const statusEnum =
+          TipStatusType[status.toUpperCase() as keyof typeof TipStatusType];
         if (statusEnum) {
-          query = query.andWhere("tip.status = :status", { status: statusEnum });
+          query = query.andWhere("tip.status = :status", {
+            status: statusEnum,
+          });
         }
       } catch (error) {
         // Invalid status, ignore
@@ -153,7 +157,9 @@ export class TipsService {
       availableTipsCount,
     };
 
-    this.logger.log(`Retrieved ${tips.length} tips (page ${page}, total: ${totalElements})`);
+    this.logger.log(
+      `Retrieved ${tips.length} tips (page ${page}, total: ${totalElements})`
+    );
     return response;
   }
 
@@ -163,7 +169,9 @@ export class TipsService {
     response.title = tip.title;
     response.description = tip.description || null;
     response.price = parseFloat(tip.price.toString());
-    response.totalOdds = tip.totalOdds ? parseFloat(tip.totalOdds.toString()) : null;
+    response.totalOdds = tip.totalOdds
+      ? parseFloat(tip.totalOdds.toString())
+      : null;
     response.status = tip.status;
     response.purchasesCount = tip.purchasesCount;
     response.publishedAt = tip.publishedAt || null;
@@ -249,7 +257,10 @@ export class TipsService {
    * Create a new tip with validations and security checks
    * Only users with TIPSTER role can create tips
    */
-  async createTip(createTipDto: CreateTipDto, userId: string): Promise<TipResponseDto> {
+  async createTip(
+    createTipDto: CreateTipDto,
+    userId: string
+  ): Promise<TipResponseDto> {
     this.logger.debug(`Creating tip for user ${userId}: ${createTipDto.title}`);
 
     // Start transaction for atomicity
@@ -278,7 +289,9 @@ export class TipsService {
       const hasTipsterRole = roles.includes("TIPSTER");
 
       if (!hasTipsterRole) {
-        this.logger.warn(`User ${userId} attempted to create tip without TIPSTER role`);
+        this.logger.warn(
+          `User ${userId} attempted to create tip without TIPSTER role`
+        );
         throw new ForbiddenException("Only tipsters can create tips");
       }
 
@@ -337,20 +350,23 @@ export class TipsService {
           );
         }
 
-        const matches = await queryRunner.manager.find(Match, {
+        const matches = await queryRunner.manager.find(MatchData, {
           where: uniqueMatchIds.map((id) => ({ id })),
         });
 
         if (matches.length !== uniqueMatchIds.length) {
           const foundIds = new Set(matches.map((m) => m.id));
           const missingIds = uniqueMatchIds.filter((id) => !foundIds.has(id));
-          throw new NotFoundException(`Matches not found: ${missingIds.join(", ")}`);
+          throw new NotFoundException(
+            `Matches not found: ${missingIds.join(", ")}`
+          );
         }
 
         // Validate all matches are scheduled and not started
         const now = new Date();
         const invalidMatches = matches.filter(
-          (m) => m.status !== MatchStatusType.scheduled || m.matchDate <= now
+          (m) =>
+            m.status !== MatchStatusType.scheduled || m.matchDatetime <= now
         );
 
         if (invalidMatches.length > 0) {
@@ -361,8 +377,8 @@ export class TipsService {
 
         // Find earliest match date
         for (const match of matches) {
-          if (!earliestMatchDate || match.matchDate < earliestMatchDate) {
-            earliestMatchDate = match.matchDate;
+          if (!earliestMatchDate || match.matchDatetime < earliestMatchDate) {
+            earliestMatchDate = match.matchDatetime;
           }
         }
 
@@ -372,7 +388,9 @@ export class TipsService {
         for (const selectionDto of createTipDto.selections) {
           const match = matches.find((m) => m.id === selectionDto.matchId);
           if (!match) {
-            throw new NotFoundException(`Match not found: ${selectionDto.matchId}`);
+            throw new NotFoundException(
+              `Match not found: ${selectionDto.matchId}`
+            );
           }
 
           // Map prediction string to prediction type and value
@@ -436,7 +454,9 @@ export class TipsService {
       });
 
       if (!tipWithRelations) {
-        throw new InternalServerErrorException("Failed to retrieve created tip");
+        throw new InternalServerErrorException(
+          "Failed to retrieve created tip"
+        );
       }
 
       return this.mapToResponse(tipWithRelations);
@@ -479,7 +499,11 @@ export class TipsService {
     }
 
     // Validate price
-    if (dto.price === null || dto.price === undefined || typeof dto.price !== "number") {
+    if (
+      dto.price === null ||
+      dto.price === undefined ||
+      typeof dto.price !== "number"
+    ) {
       throw new BadRequestException("Price is required and must be a number");
     }
 
@@ -487,10 +511,16 @@ export class TipsService {
       throw new BadRequestException("Price must be at least 0");
     }
 
-    // If price > 0, enforce minimum price
+    // If price > 0, enforce minimum and maximum price
     if (dto.price > 0 && dto.price < TipsService.MIN_PRICE) {
       throw new BadRequestException(
-        `Price must be at least ${TipsService.MIN_PRICE} for paid tips, or 0 for free tips`
+        `Price must be at least ${TipsService.MIN_PRICE} USD for paid tips, or 0 for free tips`
+      );
+    }
+
+    if (dto.price > TipsService.MAX_PRICE) {
+      throw new BadRequestException(
+        `Price must not exceed ${TipsService.MAX_PRICE} USD`
       );
     }
 
@@ -511,7 +541,9 @@ export class TipsService {
     for (let i = 0; i < dto.selections.length; i++) {
       const selection = dto.selections[i];
       if (!selection.matchId || typeof selection.matchId !== "string") {
-        throw new BadRequestException(`Selection ${i + 1}: matchId is required and must be a string`);
+        throw new BadRequestException(
+          `Selection ${i + 1}: matchId is required and must be a string`
+        );
       }
 
       if (!selection.prediction || typeof selection.prediction !== "string") {
@@ -520,16 +552,26 @@ export class TipsService {
         );
       }
 
-      if (selection.odds === null || selection.odds === undefined || typeof selection.odds !== "number") {
-        throw new BadRequestException(`Selection ${i + 1}: odds is required and must be a number`);
+      if (
+        selection.odds === null ||
+        selection.odds === undefined ||
+        typeof selection.odds !== "number"
+      ) {
+        throw new BadRequestException(
+          `Selection ${i + 1}: odds is required and must be a number`
+        );
       }
 
       if (selection.odds < 1.0) {
-        throw new BadRequestException(`Selection ${i + 1}: odds must be at least 1.0`);
+        throw new BadRequestException(
+          `Selection ${i + 1}: odds must be at least 1.0`
+        );
       }
 
       if (selection.odds > 1000) {
-        throw new BadRequestException(`Selection ${i + 1}: odds must not exceed 1000`);
+        throw new BadRequestException(
+          `Selection ${i + 1}: odds must not exceed 1000`
+        );
       }
     }
 
@@ -553,7 +595,11 @@ export class TipsService {
    * Map prediction string to PredictionType enum and value
    * Supports common prediction formats from frontend
    */
-  private mapPredictionString(prediction: string): {
+  private mapPredictionString(
+    prediction: string,
+    predictionValueFromDto?: string,
+    betLine?: number
+  ): {
     predictionType: PredictionType;
     predictionValue: string;
   } {
@@ -561,13 +607,22 @@ export class TipsService {
 
     // Match result predictions
     if (normalized === "home_win" || normalized === "home") {
-      return { predictionType: PredictionType.MATCH_RESULT, predictionValue: "home_win" };
+      return {
+        predictionType: PredictionType.MATCH_RESULT,
+        predictionValue: "home_win",
+      };
     }
     if (normalized === "away_win" || normalized === "away") {
-      return { predictionType: PredictionType.MATCH_RESULT, predictionValue: "away_win" };
+      return {
+        predictionType: PredictionType.MATCH_RESULT,
+        predictionValue: "away_win",
+      };
     }
     if (normalized === "draw") {
-      return { predictionType: PredictionType.MATCH_RESULT, predictionValue: "draw" };
+      return {
+        predictionType: PredictionType.MATCH_RESULT,
+        predictionValue: "draw",
+      };
     }
 
     // Over/Under predictions
@@ -582,27 +637,77 @@ export class TipsService {
     }
 
     // Both teams to score
-    if (normalized === "btts_yes" || normalized === "btts yes" || normalized === "both_teams_yes") {
-      return { predictionType: PredictionType.BOTH_TEAMS_TO_SCORE, predictionValue: "yes" };
+    if (
+      normalized === "btts_yes" ||
+      normalized === "btts yes" ||
+      normalized === "both_teams_yes"
+    ) {
+      return {
+        predictionType: PredictionType.BOTH_TEAMS_TO_SCORE,
+        predictionValue: "yes",
+      };
     }
-    if (normalized === "btts_no" || normalized === "btts no" || normalized === "both_teams_no") {
-      return { predictionType: PredictionType.BOTH_TEAMS_TO_SCORE, predictionValue: "no" };
+    if (
+      normalized === "btts_no" ||
+      normalized === "btts no" ||
+      normalized === "both_teams_no"
+    ) {
+      return {
+        predictionType: PredictionType.BOTH_TEAMS_TO_SCORE,
+        predictionValue: "no",
+      };
     }
 
     // Double chance
     if (normalized === "home_draw" || normalized === "1x") {
-      return { predictionType: PredictionType.DOUBLE_CHANCE, predictionValue: "home_draw" };
+      return {
+        predictionType: PredictionType.DOUBLE_CHANCE,
+        predictionValue: "home_draw",
+      };
     }
     if (normalized === "home_away" || normalized === "12") {
-      return { predictionType: PredictionType.DOUBLE_CHANCE, predictionValue: "home_away" };
+      return {
+        predictionType: PredictionType.DOUBLE_CHANCE,
+        predictionValue: "home_away",
+      };
     }
     if (normalized === "away_draw" || normalized === "x2") {
-      return { predictionType: PredictionType.DOUBLE_CHANCE, predictionValue: "away_draw" };
+      return {
+        predictionType: PredictionType.DOUBLE_CHANCE,
+        predictionValue: "away_draw",
+      };
     }
 
-    // Handicap (assume it's a handicap prediction)
-    if (normalized.includes("handicap")) {
-      return { predictionType: PredictionType.HANDICAP, predictionValue: normalized };
+    // Handicap predictions
+    // Formats: "handicap", "home_-1.5", "away_+1.5", etc.
+    if (normalized === "handicap" || normalized.includes("handicap")) {
+      // If it's just "handicap", construct the value from predictionValue or betLine
+      if (normalized === "handicap") {
+        if (predictionValueFromDto) {
+          return {
+            predictionType: PredictionType.HANDICAP,
+            predictionValue: predictionValueFromDto,
+          };
+        }
+        // If betLine is provided, construct a generic handicap value
+        // Note: We don't know home/away from just betLine, so use a generic format
+        if (betLine !== undefined) {
+          const sign = betLine >= 0 ? "+" : "";
+          return {
+            predictionType: PredictionType.HANDICAP,
+            predictionValue: `handicap_${sign}${betLine}`,
+          };
+        }
+        return {
+          predictionType: PredictionType.HANDICAP,
+          predictionValue: "handicap",
+        };
+      }
+      // If it contains "handicap" and has a value like "home_-1.5", use it as-is
+      return {
+        predictionType: PredictionType.HANDICAP,
+        predictionValue: normalized,
+      };
     }
 
     // Default: treat as custom prediction value
@@ -615,24 +720,39 @@ export class TipsService {
 
     // Try to infer type from value
     if (normalized.startsWith("over_") || normalized.startsWith("under_")) {
-      return { predictionType: PredictionType.OVER_UNDER, predictionValue: normalized };
+      return {
+        predictionType: PredictionType.OVER_UNDER,
+        predictionValue: normalized,
+      };
     }
     if (normalized.includes("btts") || normalized.includes("both_teams")) {
-      return { predictionType: PredictionType.BOTH_TEAMS_TO_SCORE, predictionValue: normalized };
+      return {
+        predictionType: PredictionType.BOTH_TEAMS_TO_SCORE,
+        predictionValue: normalized,
+      };
     }
     if (
       normalized.includes("home_draw") ||
       normalized.includes("home_away") ||
       normalized.includes("away_draw")
     ) {
-      return { predictionType: PredictionType.DOUBLE_CHANCE, predictionValue: normalized };
+      return {
+        predictionType: PredictionType.DOUBLE_CHANCE,
+        predictionValue: normalized,
+      };
     }
     if (normalized.includes("handicap")) {
-      return { predictionType: PredictionType.HANDICAP, predictionValue: normalized };
+      return {
+        predictionType: PredictionType.HANDICAP,
+        predictionValue: normalized,
+      };
     }
 
     // Default to MATCH_RESULT for unrecognized formats
-    return { predictionType: PredictionType.MATCH_RESULT, predictionValue: normalized };
+    return {
+      predictionType: PredictionType.MATCH_RESULT,
+      predictionValue: normalized,
+    };
   }
 
   /**
@@ -717,9 +837,17 @@ export class TipsService {
         if (updateTipDto.price < 0) {
           throw new BadRequestException("Price must be at least 0");
         }
-        if (updateTipDto.price > 0 && updateTipDto.price < TipsService.MIN_PRICE) {
+        if (
+          updateTipDto.price > 0 &&
+          updateTipDto.price < TipsService.MIN_PRICE
+        ) {
           throw new BadRequestException(
-            `Price must be at least ${TipsService.MIN_PRICE} for paid tips, or 0 for free tips`
+            `Price must be at least ${TipsService.MIN_PRICE} USD for paid tips, or 0 for free tips`
+          );
+        }
+        if (updateTipDto.price > TipsService.MAX_PRICE) {
+          throw new BadRequestException(
+            `Price must not exceed ${TipsService.MAX_PRICE} USD`
           );
         }
         tip.price = updateTipDto.price;
@@ -740,7 +868,9 @@ export class TipsService {
       });
 
       if (!tipWithRelations) {
-        throw new InternalServerErrorException("Failed to retrieve updated tip");
+        throw new InternalServerErrorException(
+          "Failed to retrieve updated tip"
+        );
       }
 
       return this.mapToResponse(tipWithRelations);
@@ -801,7 +931,9 @@ export class TipsService {
       const hasTipsterRole = roles.includes("TIPSTER");
 
       if (!hasTipsterRole) {
-        throw new ForbiddenException("Only tipsters can add selections to tips");
+        throw new ForbiddenException(
+          "Only tipsters can add selections to tips"
+        );
       }
 
       // 3. Get tip with tipster relation
@@ -816,7 +948,9 @@ export class TipsService {
 
       // 4. Verify tip belongs to the user
       if (tip.tipster.user?.id !== userId) {
-        throw new ForbiddenException("You can only add selections to your own tips");
+        throw new ForbiddenException(
+          "You can only add selections to your own tips"
+        );
       }
 
       // 5. Verify tip is not published
@@ -827,16 +961,21 @@ export class TipsService {
       }
 
       // 6. Validate match exists and is scheduled
-      const match = await queryRunner.manager.findOne(Match, {
+      const match = await queryRunner.manager.findOne(MatchData, {
         where: { id: addSelectionDto.matchId },
       });
 
       if (!match) {
-        throw new NotFoundException(`Match not found: ${addSelectionDto.matchId}`);
+        throw new NotFoundException(
+          `Match not found: ${addSelectionDto.matchId}`
+        );
       }
 
       const now = new Date();
-      if (match.status !== MatchStatusType.scheduled || match.matchDate <= now) {
+      if (
+        match.status !== MatchStatusType.scheduled ||
+        match.matchDatetime <= now
+      ) {
         throw new BadRequestException(
           "Cannot add selection: match is not scheduled or has already started"
         );
@@ -844,7 +983,9 @@ export class TipsService {
 
       // 7. Map prediction string to prediction type and value
       const { predictionType, predictionValue } = this.mapPredictionString(
-        addSelectionDto.prediction
+        addSelectionDto.prediction,
+        undefined,
+        addSelectionDto.betLine
       );
 
       // 8. Validate odds
@@ -857,14 +998,17 @@ export class TipsService {
       }
 
       // 9. Check for existing selection with same match, prediction type, and value
-      const existingSelection = await queryRunner.manager.findOne(TipSelection, {
-        where: {
-          tip: { id: tipId },
-          match: { id: addSelectionDto.matchId },
-          predictionType: predictionType,
-          predictionValue: predictionValue,
-        },
-      });
+      const existingSelection = await queryRunner.manager.findOne(
+        TipSelection,
+        {
+          where: {
+            tip: { id: tipId },
+            match: { id: addSelectionDto.matchId },
+            predictionType: predictionType,
+            predictionValue: predictionValue,
+          },
+        }
+      );
 
       // 10. Handle mutual exclusivity (match_result, double_chance, handicap)
       if (predictionType === PredictionType.MATCH_RESULT) {
@@ -901,7 +1045,10 @@ export class TipsService {
 
       // 11. Remove any existing selection of the same betType for this match (to replace it)
       if (existingSelection) {
-        await queryRunner.manager.remove(TipSelection, existingSelection);
+        // Delete by ID to ensure it's fully removed
+        await queryRunner.manager.delete(TipSelection, {
+          id: existingSelection.id,
+        });
       } else {
         // Check if we're at the max selections limit
         const currentSelectionsCount = await queryRunner.manager.count(
@@ -919,16 +1066,24 @@ export class TipsService {
       }
 
       // 12. Create or update selection
-      const selection = queryRunner.manager.create(TipSelection, {
-        tip: { id: tipId },
-        match: { id: addSelectionDto.matchId },
-        predictionType: predictionType,
-        predictionValue: predictionValue,
-        odds: addSelectionDto.odds,
-        isVoid: false,
-      });
+      // Use tipId and matchId directly - we know they exist because we loaded the entities
+      this.logger.debug(
+        `Inserting selection: tipId=${tipId}, matchId=${addSelectionDto.matchId}, predictionType=${predictionType}, predictionValue=${predictionValue}`
+      );
 
-      await queryRunner.manager.save(TipSelection, selection);
+      // Use raw SQL insert with explicit tipId and matchId
+      await queryRunner.manager.query(
+        `INSERT INTO tip_selections (tip_id, match_id, prediction_type, prediction_value, odds, is_void, created_at, updated_at)
+         VALUES ($1::uuid, $2::uuid, $3::prediction_type, $4, $5, $6, NOW(), NOW())`,
+        [
+          tipId, // Use tipId parameter directly
+          addSelectionDto.matchId, // Use matchId from DTO directly
+          predictionType,
+          predictionValue,
+          addSelectionDto.odds,
+          false,
+        ]
+      );
 
       // 13. Recalculate total odds and earliest match date
       const allSelections = await queryRunner.manager.find(TipSelection, {
@@ -941,9 +1096,12 @@ export class TipsService {
 
       for (const sel of allSelections) {
         totalOdds *= sel.odds || 1.0;
-        if (sel.match && sel.match.matchDate) {
-          if (!earliestMatchDate || sel.match.matchDate < earliestMatchDate) {
-            earliestMatchDate = sel.match.matchDate;
+        if (sel.match && sel.match.matchDatetime) {
+          if (
+            !earliestMatchDate ||
+            sel.match.matchDatetime < earliestMatchDate
+          ) {
+            earliestMatchDate = sel.match.matchDatetime;
           }
         }
       }
@@ -967,13 +1125,18 @@ export class TipsService {
       });
 
       if (!tipWithRelations) {
-        throw new InternalServerErrorException("Failed to retrieve updated tip");
+        throw new InternalServerErrorException(
+          "Failed to retrieve updated tip"
+        );
       }
 
       return this.mapToResponse(tipWithRelations);
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      this.logger.error(`Error adding selection: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error adding selection: ${error.message}`,
+        error.stack
+      );
 
       if (
         error instanceof BadRequestException ||
@@ -1028,7 +1191,9 @@ export class TipsService {
       const hasTipsterRole = roles.includes("TIPSTER");
 
       if (!hasTipsterRole) {
-        throw new ForbiddenException("Only tipsters can remove selections from tips");
+        throw new ForbiddenException(
+          "Only tipsters can remove selections from tips"
+        );
       }
 
       // 3. Get tip with tipster relation
@@ -1043,7 +1208,9 @@ export class TipsService {
 
       // 4. Verify tip belongs to the user
       if (tip.tipster.user?.id !== userId) {
-        throw new ForbiddenException("You can only remove selections from your own tips");
+        throw new ForbiddenException(
+          "You can only remove selections from your own tips"
+        );
       }
 
       // 5. Verify tip is not published
@@ -1078,14 +1245,18 @@ export class TipsService {
 
       for (const sel of allSelections) {
         totalOdds *= sel.odds || 1.0;
-        if (sel.match && sel.match.matchDate) {
-          if (!earliestMatchDate || sel.match.matchDate < earliestMatchDate) {
-            earliestMatchDate = sel.match.matchDate;
+        if (sel.match && sel.match.matchDatetime) {
+          if (
+            !earliestMatchDate ||
+            sel.match.matchDatetime < earliestMatchDate
+          ) {
+            earliestMatchDate = sel.match.matchDatetime;
           }
         }
       }
 
-      tip.totalOdds = allSelections.length > 0 && totalOdds > 1.0 ? totalOdds : null;
+      tip.totalOdds =
+        allSelections.length > 0 && totalOdds > 1.0 ? totalOdds : null;
       tip.earliestMatchDate = earliestMatchDate;
 
       await queryRunner.manager.save(Tip, tip);
@@ -1104,13 +1275,18 @@ export class TipsService {
       });
 
       if (!tipWithRelations) {
-        throw new InternalServerErrorException("Failed to retrieve updated tip");
+        throw new InternalServerErrorException(
+          "Failed to retrieve updated tip"
+        );
       }
 
       return this.mapToResponse(tipWithRelations);
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      this.logger.error(`Error removing selection: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error removing selection: ${error.message}`,
+        error.stack
+      );
 
       if (
         error instanceof BadRequestException ||
