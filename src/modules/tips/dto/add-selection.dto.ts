@@ -1,5 +1,12 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsUUID, IsString, IsNumber, Min, IsNotEmpty, IsOptional } from "class-validator";
+import {
+  IsUUID,
+  IsString,
+  IsNumber,
+  Min,
+  IsNotEmpty,
+  IsOptional,
+} from "class-validator";
 
 /**
  * DTO for adding/updating a selection to a tip

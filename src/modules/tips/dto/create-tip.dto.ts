@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsNumber,
   Min,
+  Max,
   IsArray,
   ValidateNested,
   MaxLength,
@@ -37,13 +38,15 @@ export class CreateTipDto {
   description?: string;
 
   @ApiProperty({
-    description: "Price of the tip (minimum 0, free tips have price 0)",
+    description: "Price of the tip (0 for free, 1-100 USD for paid tips)",
     example: 10.5,
     minimum: 0,
+    maximum: 100,
     default: 0,
   })
   @IsNumber({}, { message: "Price must be a number" })
   @Min(0, { message: "Price must be at least 0" })
+  @Max(100, { message: "Price must not exceed 100 USD" })
   price: number;
 
   @ApiProperty({
