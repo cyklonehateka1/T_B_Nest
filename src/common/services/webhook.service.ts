@@ -59,7 +59,7 @@ export class WebhookService {
     webhookId: string,
     timestamp: string,
     payload: string,
-    secret: string
+    secret: string,
   ): string {
     const data = `${webhookId}.${timestamp}.${payload}`;
     return crypto.createHmac("sha256", secret).update(data).digest("hex");
@@ -69,7 +69,7 @@ export class WebhookService {
    * Send order notification webhook to admin app
    */
   async sendOrderNotification(
-    payload: OrderNotificationPayload
+    payload: OrderNotificationPayload,
   ): Promise<boolean> {
     try {
       const webhookUrl = `${this.adminBaseUrl}/webhooks/orders`;
@@ -80,7 +80,7 @@ export class WebhookService {
         webhookId,
         timestamp,
         payloadString,
-        this.webhookSecret
+        this.webhookSecret,
       );
 
       const response: AxiosResponse = await axios.post(webhookUrl, payload, {
@@ -98,19 +98,19 @@ export class WebhookService {
         return true;
       } else {
         this.logger.warn(
-          `Order notification webhook returned status ${response.status} for order: ${payload.orderId}`
+          `Order notification webhook returned status ${response.status} for order: ${payload.orderId}`,
         );
         return false;
       }
     } catch (error) {
       this.logger.error(
-        `❌ Failed to send order notification webhook for order ${payload.orderId}: ${error.message}`
+        `❌ Failed to send order notification webhook for order ${payload.orderId}: ${error.message}`,
       );
 
       if (axios.isAxiosError(error)) {
         this.logger.error(`Response status: ${error.response?.status}`);
         this.logger.error(
-          `Response data: ${JSON.stringify(error.response?.data)}`
+          `Response data: ${JSON.stringify(error.response?.data)}`,
         );
       }
 
@@ -122,7 +122,7 @@ export class WebhookService {
    * Send order status update webhook to admin app
    */
   async sendOrderStatusUpdate(
-    payload: OrderStatusUpdatePayload
+    payload: OrderStatusUpdatePayload,
   ): Promise<boolean> {
     try {
       const webhookUrl = `${this.adminBaseUrl}/webhooks/orders`;
@@ -133,7 +133,7 @@ export class WebhookService {
         webhookId,
         timestamp,
         payloadString,
-        this.webhookSecret
+        this.webhookSecret,
       );
 
       const response: AxiosResponse = await axios.post(webhookUrl, payload, {
@@ -151,19 +151,19 @@ export class WebhookService {
         return true;
       } else {
         this.logger.warn(
-          `Order status update webhook returned status ${response.status} for order: ${payload.orderId}`
+          `Order status update webhook returned status ${response.status} for order: ${payload.orderId}`,
         );
         return false;
       }
     } catch (error) {
       this.logger.error(
-        `❌ Failed to send order status update webhook for order ${payload.orderId}: ${error.message}`
+        `❌ Failed to send order status update webhook for order ${payload.orderId}: ${error.message}`,
       );
 
       if (axios.isAxiosError(error)) {
         this.logger.error(`Response status: ${error.response?.status}`);
         this.logger.error(
-          `Response data: ${JSON.stringify(error.response?.data)}`
+          `Response data: ${JSON.stringify(error.response?.data)}`,
         );
       }
 
@@ -191,13 +191,13 @@ export class WebhookService {
         return true;
       } else {
         this.logger.warn(
-          `Webhook connectivity test returned status: ${response.status}`
+          `Webhook connectivity test returned status: ${response.status}`,
         );
         return false;
       }
     } catch (error) {
       this.logger.error(
-        `❌ Webhook connectivity test failed: ${error.message}`
+        `❌ Webhook connectivity test failed: ${error.message}`,
       );
       return false;
     }
@@ -209,7 +209,7 @@ export class WebhookService {
   async retryWebhook(
     webhookFunction: () => Promise<boolean>,
     maxRetries: number = 3,
-    baseDelay: number = 1000
+    baseDelay: number = 1000,
   ): Promise<boolean> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {

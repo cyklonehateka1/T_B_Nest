@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
-import { EmailTemplateService } from './email-template.service';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import axios from "axios";
+import { EmailTemplateService } from "./email-template.service";
 
 export interface EmailOptions {
   to: string;
@@ -45,34 +45,34 @@ export class EmailService {
     private readonly templateService: EmailTemplateService,
   ) {
     // Load Brevo API config from environment
-    const apiKey = this.configService.get<string>('BREVO_SMTP_API_KEY');
+    const apiKey = this.configService.get<string>("BREVO_SMTP_API_KEY");
     const baseUrl = this.configService.get<string>(
-      'BREVO_SMTP_BASE_URL',
-      'https://api.brevo.com',
+      "BREVO_SMTP_BASE_URL",
+      "https://api.brevo.com",
     );
 
     if (!apiKey) {
-      throw new Error('BREVO_SMTP_API_KEY is required for Brevo API');
+      throw new Error("BREVO_SMTP_API_KEY is required for Brevo API");
     }
 
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
 
     this.emailFrom = this.configService.get<string>(
-      'EMAIL_FROM',
-      'support@giftbanc.com',
+      "EMAIL_FROM",
+      "support@giftbanc.com",
     );
     this.emailFromName = this.configService.get<string>(
-      'EMAIL_FROM_NAME',
-      'GiftBanc',
+      "EMAIL_FROM_NAME",
+      "GiftBanc",
     );
     this.frontendUrl = this.configService.get<string>(
-      'FRONTEND_URL',
-      'https://giftbanc.com',
+      "FRONTEND_URL",
+      "https://giftbanc.com",
     );
     this.supportEmail = this.configService.get<string>(
-      'SUPPORT_EMAIL',
-      'support@giftbanc.com',
+      "SUPPORT_EMAIL",
+      "support@giftbanc.com",
     );
   }
 
@@ -86,7 +86,7 @@ export class EmailService {
         to: [
           {
             email: options.to,
-            name: options.to.split('@')[0], // Use email prefix as name if no name provided
+            name: options.to.split("@")[0], // Use email prefix as name if no name provided
           },
         ],
         subject: options.subject,
@@ -97,7 +97,7 @@ export class EmailService {
       if (options.replyTo) {
         payload.replyTo = {
           email: options.replyTo,
-          name: options.replyTo.split('@')[0],
+          name: options.replyTo.split("@")[0],
         };
       }
 
@@ -106,17 +106,17 @@ export class EmailService {
         payload,
         {
           headers: {
-            accept: 'application/json',
-            'api-key': this.apiKey,
-            'content-type': 'application/json',
+            accept: "application/json",
+            "api-key": this.apiKey,
+            "content-type": "application/json",
           },
         },
       );
     } catch (error) {
-      this.logger.error('Brevo API: Error sending email', error);
+      this.logger.error("Brevo API: Error sending email", error);
       if (axios.isAxiosError(error)) {
-        this.logger.error('API Response:', error.response?.data);
-        this.logger.error('API Status:', error.response?.status);
+        this.logger.error("API Response:", error.response?.data);
+        this.logger.error("API Status:", error.response?.status);
       }
       throw error;
     }
@@ -157,7 +157,7 @@ export class EmailService {
     });
     await this.sendEmail({
       to: email,
-      subject: 'Reset Your Password - GiftBanc',
+      subject: "Reset Your Password - GiftBanc",
       html,
       from: this.emailFrom,
     });
@@ -178,7 +178,7 @@ export class EmailService {
     });
     await this.sendEmail({
       to: email,
-      subject: 'Verify Your Email - Gift Card Shop',
+      subject: "Verify Your Email - Gift Card Shop",
       html,
       from: this.emailFrom,
     });
@@ -288,7 +288,7 @@ export class EmailService {
     const html = this.templateService.generatePasswordChangeNotification();
     await this.sendEmail({
       to: email,
-      subject: '🔒 Password Changed Successfully',
+      subject: "🔒 Password Changed Successfully",
       html,
     });
   }
@@ -297,7 +297,7 @@ export class EmailService {
     const html = this.templateService.generateAccountDeletionNotification();
     await this.sendEmail({
       to: email,
-      subject: '🗑️ Account Deleted Successfully',
+      subject: "🗑️ Account Deleted Successfully",
       html,
     });
   }

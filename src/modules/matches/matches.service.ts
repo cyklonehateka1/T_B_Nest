@@ -17,12 +17,12 @@ import {
 export class MatchesService {
   constructor(
     @InjectRepository(MatchData)
-    private readonly matchDataRepository: Repository<MatchData>
+    private readonly matchDataRepository: Repository<MatchData>,
   ) {}
 
   async getUpcomingMatches(
     leagueId?: string,
-    isTipster: boolean = false
+    isTipster: boolean = false,
   ): Promise<Array<MatchBasicResponseDto | MatchDetailedResponseDto>> {
     const now = new Date();
 
@@ -64,7 +64,7 @@ export class MatchesService {
 
   async getUpcomingMatchesByLeagueExternalId(
     leagueExternalId: string,
-    isTipster: boolean = false
+    isTipster: boolean = false,
   ): Promise<Array<MatchBasicResponseDto | MatchDetailedResponseDto>> {
     const now = new Date();
 

@@ -191,7 +191,7 @@ export class AuthController {
     },
   })
   async register(
-    @Body() registerDto: RegisterDto
+    @Body() registerDto: RegisterDto,
   ): Promise<ApiResponseClass<{ message: string; email: string }>> {
     return await this.authService.register(registerDto);
   }
@@ -242,7 +242,7 @@ export class AuthController {
     },
   })
   async verifyOtp(
-    @Body() verifyOtpDto: VerifyOtpDto
+    @Body() verifyOtpDto: VerifyOtpDto,
   ): Promise<ApiResponseClass<SigninResponse>> {
     return await this.authService.verifyOtp(verifyOtpDto);
   }
@@ -289,7 +289,7 @@ export class AuthController {
     },
   })
   async resendOtp(
-    @Body() resendOtpDto: ResendOtpDto
+    @Body() resendOtpDto: ResendOtpDto,
   ): Promise<ApiResponseClass<{ message: string }>> {
     return await this.authService.resendOtp(resendOtpDto.email);
   }
@@ -339,11 +339,11 @@ export class AuthController {
   })
   async changePassword(
     @Body() changePasswordDto: ChangePasswordDto,
-    @CurrentUser() currentUser: User
+    @CurrentUser() currentUser: User,
   ): Promise<ApiResponseClass<null>> {
     return await this.authService.changePassword(
       changePasswordDto,
-      currentUser
+      currentUser,
     );
   }
 
@@ -392,7 +392,7 @@ export class AuthController {
   })
   async deleteAccount(
     @Body() deleteAccountDto: DeleteAccountDto,
-    @CurrentUser() currentUser: User
+    @CurrentUser() currentUser: User,
   ): Promise<ApiResponseClass<null>> {
     return await this.authService.deleteAccount(deleteAccountDto, currentUser);
   }
@@ -427,7 +427,7 @@ export class AuthController {
     },
   })
   async forgotPassword(
-    @Body() forgotPasswordDto: ForgotPasswordDto
+    @Body() forgotPasswordDto: ForgotPasswordDto,
   ): Promise<ApiResponseClass<null>> {
     return await this.authService.forgotPassword(forgotPasswordDto);
   }
@@ -464,7 +464,7 @@ export class AuthController {
     },
   })
   async resetPassword(
-    @Body() resetPasswordDto: ResetPasswordDto
+    @Body() resetPasswordDto: ResetPasswordDto,
   ): Promise<ApiResponseClass<null>> {
     return await this.authService.resetPassword(resetPasswordDto);
   }
@@ -502,7 +502,7 @@ export class AuthController {
     },
   })
   async refreshToken(
-    @Body() body: { refreshToken: string }
+    @Body() body: { refreshToken: string },
   ): Promise<ApiResponseClass<SigninResponse>> {
     return await this.authService.refreshToken(body.refreshToken);
   }
@@ -529,7 +529,7 @@ export class AuthController {
   async logout(
     @CurrentUser() currentUser: User,
     @Req() req: Request,
-    @Body() body?: { refreshToken?: string }
+    @Body() body?: { refreshToken?: string },
   ): Promise<ApiResponseClass<null>> {
     // Extract token from Authorization header
     const authHeader = req.headers.authorization;
@@ -574,7 +574,7 @@ export class AuthController {
     },
   })
   async getSession(
-    @CurrentUser() currentUser: User
+    @CurrentUser() currentUser: User,
   ): Promise<ApiResponseClass<any>> {
     return await this.authService.getSession(currentUser.id);
   }
@@ -611,7 +611,7 @@ export class AuthController {
   })
   async getUserSession(
     @CurrentUser() currentUser: User,
-    @Req() req: Request
+    @Req() req: Request,
   ): Promise<ApiResponseClass<UserSessionResponse>> {
     // Extract IP address from request
     const userIP = this.extractUserIP(req);

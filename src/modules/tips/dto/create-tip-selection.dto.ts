@@ -1,5 +1,12 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsUUID, IsString, IsNumber, Min, IsNotEmpty } from "class-validator";
+import {
+  IsUUID,
+  IsString,
+  IsNumber,
+  Min,
+  IsNotEmpty,
+  IsOptional,
+} from "class-validator";
 
 /**
  * DTO for creating a tip selection (match prediction within a tip)
@@ -22,11 +29,12 @@ export class CreateTipSelectionDto {
   prediction: string;
 
   @ApiProperty({
-    description: "Odds for this prediction",
+    description: "Odds for this prediction (optional, can be null)",
     example: 2.5,
-    minimum: 1.0,
+    required: false,
+    nullable: true,
   })
   @IsNumber({}, { message: "Odds must be a number" })
-  @Min(1.0, { message: "Odds must be at least 1.0" })
-  odds: number;
+  @IsOptional()
+  odds?: number | null;
 }

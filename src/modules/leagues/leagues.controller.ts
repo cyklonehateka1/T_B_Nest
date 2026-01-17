@@ -43,7 +43,7 @@ export class LeaguesController {
     const leagues = await this.leaguesService.getFootballLeagues();
     return ApiResponseClass.success(
       leagues,
-      "Football leagues retrieved successfully"
+      "Football leagues retrieved successfully",
     );
   }
 
@@ -84,7 +84,7 @@ export class LeaguesController {
     },
   })
   async getLeagues(
-    @Query("sportGroup") sportGroup?: string
+    @Query("sportGroup") sportGroup?: string,
   ): Promise<ApiResponseClass<LeagueResponseDto[]>> {
     let leagues: LeagueResponseDto[];
 

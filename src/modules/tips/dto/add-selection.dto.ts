@@ -29,13 +29,14 @@ export class AddSelectionDto {
   prediction: string;
 
   @ApiProperty({
-    description: "Odds for this prediction",
+    description: "Odds for this prediction (optional, can be null)",
     example: 2.5,
-    minimum: 1.0,
+    required: false,
+    nullable: true,
   })
   @IsNumber({}, { message: "Odds must be a number" })
-  @Min(1.0, { message: "Odds must be at least 1.0" })
-  odds: number;
+  @IsOptional()
+  odds?: number | null;
 
   @ApiProperty({
     description: "Bet line (for handicap selections)",

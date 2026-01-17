@@ -14,7 +14,7 @@ export class TransformInterceptor<T>
 {
   intercept(
     context: ExecutionContext,
-    next: CallHandler
+    next: CallHandler,
   ): Observable<ApiResponseDto<T>> {
     return next.handle().pipe(
       map((data) => {
@@ -25,7 +25,7 @@ export class TransformInterceptor<T>
 
         // Transform the response to follow the standard structure
         return ApiResponseDto.success(data, "Success");
-      })
+      }),
     );
   }
 }

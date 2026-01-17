@@ -97,13 +97,13 @@ describe("PhoneValidationUtil", () => {
       try {
         PhoneValidationUtil.validateGhanaianPhoneNumber(
           "invalid",
-          "Custom Field"
+          "Custom Field",
         );
         fail("Should have thrown an exception");
       } catch (error: any) {
         expect(error.message).toContain("Custom Field");
         expect(error.message).toBe(
-          "Custom Field must be a valid Ghanaian phone number"
+          "Custom Field must be a valid Ghanaian phone number",
         );
       }
     });
@@ -147,10 +147,10 @@ describe("PhoneValidationUtil", () => {
 
     it("should return AirtelTigo for AirtelTigo numbers", () => {
       expect(PhoneValidationUtil.getNetworkName("0261234567")).toBe(
-        "AirtelTigo"
+        "AirtelTigo",
       );
       expect(PhoneValidationUtil.getNetworkName("0271234567")).toBe(
-        "AirtelTigo"
+        "AirtelTigo",
       );
     });
 

@@ -41,7 +41,7 @@ export class PhoneValidationUtil {
    */
   static validateGhanaianPhoneNumber(
     phoneNumber: string,
-    fieldName: string = "Phone number"
+    fieldName: string = "Phone number",
   ): string {
     if (!phoneNumber) {
       throw new BadRequestException(`${fieldName} is required`);

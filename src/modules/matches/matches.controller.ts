@@ -1,5 +1,11 @@
 import { Controller, Get, Query, Request } from "@nestjs/common";
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from "@nestjs/swagger";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiQuery,
+  ApiBearerAuth,
+} from "@nestjs/swagger";
 import { MatchesService } from "./matches.service";
 import { MatchBasicResponseDto } from "./dto/match-basic-response.dto";
 import { MatchDetailedResponseDto } from "./dto/match-detailed-response.dto";
@@ -13,7 +19,8 @@ export class MatchesController {
   @Get("upcoming")
   @ApiOperation({
     summary: "Get upcoming matches",
-    description: "Retrieve upcoming matches, optionally filtered by league. Returns basic match info for regular users, detailed info with odds for tipsters.",
+    description:
+      "Retrieve upcoming matches, optionally filtered by league. Returns basic match info for regular users, detailed info with odds for tipsters.",
   })
   @ApiQuery({
     name: "leagueId",
@@ -70,23 +77,32 @@ export class MatchesController {
   })
   @ApiResponse({
     status: 200,
-    description: "Upcoming matches with odds retrieved successfully (for tipsters)",
+    description:
+      "Upcoming matches with odds retrieved successfully (for tipsters)",
     type: [MatchDetailedResponseDto],
   })
   async getUpcomingMatches(
     @Query("leagueId") leagueId?: string,
     @Query("leagueExternalId") leagueExternalId?: string,
-    @Request() req?: any
-  ): Promise<ApiResponseClass<Array<MatchBasicResponseDto | MatchDetailedResponseDto>>> {
+    @Request() req?: any,
+  ): Promise<
+    ApiResponseClass<Array<MatchBasicResponseDto | MatchDetailedResponseDto>>
+  > {
     // Check if user is a tipster (defaults to false for unauthenticated users)
     const isTipster = this.isUserTipster(req);
 
     let matches: Array<MatchBasicResponseDto | MatchDetailedResponseDto>;
-    
+
     if (leagueExternalId && leagueExternalId.trim() !== "") {
-      matches = await this.matchesService.getUpcomingMatchesByLeagueExternalId(leagueExternalId, isTipster);
+      matches = await this.matchesService.getUpcomingMatchesByLeagueExternalId(
+        leagueExternalId,
+        isTipster,
+      );
     } else {
-      matches = await this.matchesService.getUpcomingMatches(leagueId, isTipster);
+      matches = await this.matchesService.getUpcomingMatches(
+        leagueId,
+        isTipster,
+      );
     }
 
     const message = isTipster

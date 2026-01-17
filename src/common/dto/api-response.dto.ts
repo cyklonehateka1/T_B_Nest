@@ -44,7 +44,7 @@ export class ApiResponse<T> implements IApiResponse<T> {
     data?: T,
     message?: string,
     error?: string,
-    statusCode?: number
+    statusCode?: number,
   ) {
     this.success = success;
     this.data = data;

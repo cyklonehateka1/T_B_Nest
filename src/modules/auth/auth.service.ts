@@ -48,7 +48,7 @@ export class AuthService {
     private readonly invalidatedTokenRepository: Repository<InvalidatedToken>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-    private readonly emailService: EmailService
+    private readonly emailService: EmailService,
   ) {}
 
   async login(signinDto: SigninDto): Promise<ApiResponse<any>> {
@@ -87,7 +87,7 @@ export class AuthService {
     // Check if user is verified
     if (!user.isVerified) {
       throw new UnauthorizedException(
-        "Please verify your email before signing in"
+        "Please verify your email before signing in",
       );
     }
 
@@ -107,15 +107,17 @@ export class AuthService {
     });
 
     // Get primary role (first role or default to USER)
-    const primaryRole = userRoles.length > 0 ? userRoles[0].role : UserRoleType.USER;
+    const primaryRole =
+      userRoles.length > 0 ? userRoles[0].role : UserRoleType.USER;
 
     // Generate access token (use the token from generateTokens)
     const tokens = await this.generateTokens(user, userRoles);
 
     // Build display name from firstName and lastName or use displayName
-    const displayName = user.displayName || 
-      (user.firstName || user.lastName 
-        ? `${user.firstName || ""} ${user.lastName || ""}`.trim() 
+    const displayName =
+      user.displayName ||
+      (user.firstName || user.lastName
+        ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
         : undefined);
 
     // Return AuthResponse format matching Java backend and frontend expectations
@@ -137,7 +139,7 @@ export class AuthService {
   }
 
   async register(
-    registerDto: RegisterDto
+    registerDto: RegisterDto,
   ): Promise<ApiResponse<{ message: string; email: string }>> {
     const { email, firstName, lastName, password, phoneNumber, country } =
       registerDto;
@@ -158,7 +160,7 @@ export class AuthService {
 
     if (deletedUser) {
       throw new ConflictException(
-        "This email was previously associated with a deleted account"
+        "This email was previously associated with a deleted account",
       );
     }
 
@@ -196,12 +198,12 @@ export class AuthService {
 
     return ApiResponse.success(
       { message: "OTP sent to your email", email: email },
-      "Registration initiated. Please check your email for OTP verification."
+      "Registration initiated. Please check your email for OTP verification.",
     );
   }
 
   async verifyOtp(
-    verifyOtpDto: VerifyOtpDto
+    verifyOtpDto: VerifyOtpDto,
   ): Promise<ApiResponse<SigninResponse>> {
     const { email, otp } = verifyOtpDto;
 
@@ -290,13 +292,13 @@ export class AuthService {
 
     return ApiResponse.success(
       { message: "New OTP sent to your email" },
-      "OTP resent successfully"
+      "OTP resent successfully",
     );
   }
 
   async changePassword(
     changePasswordDto: ChangePasswordDto,
-    currentUser: User
+    currentUser: User,
   ): Promise<ApiResponse<null>> {
     const { oldPassword, newPassword } = changePasswordDto;
 
@@ -321,7 +323,7 @@ export class AuthService {
     const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
     if (isSamePassword) {
       throw new BadRequestException(
-        "New password must be different from current password"
+        "New password must be different from current password",
       );
     }
 
@@ -330,7 +332,7 @@ export class AuthService {
     const emailParts = user.email.split("@")[0].toLowerCase();
     if (newPassword.toLowerCase().includes(emailParts)) {
       throw new BadRequestException(
-        "Password cannot contain your email address"
+        "Password cannot contain your email address",
       );
     }
 
@@ -350,7 +352,7 @@ export class AuthService {
 
   async deleteAccount(
     deleteAccountDto: DeleteAccountDto,
-    currentUser: User
+    currentUser: User,
   ): Promise<ApiResponse<null>> {
     const { password, confirmation } = deleteAccountDto;
 
@@ -358,7 +360,7 @@ export class AuthService {
     const expectedConfirmation = "DELETE MY ACCOUNT";
     if (confirmation !== expectedConfirmation) {
       throw new BadRequestException(
-        "Invalid confirmation message. Please type the exact confirmation text."
+        "Invalid confirmation message. Please type the exact confirmation text.",
       );
     }
 
@@ -427,7 +429,7 @@ export class AuthService {
   }
 
   async forgotPassword(
-    forgotPasswordDto: ForgotPasswordDto
+    forgotPasswordDto: ForgotPasswordDto,
   ): Promise<ApiResponse<null>> {
     const { email } = forgotPasswordDto;
 
@@ -440,7 +442,7 @@ export class AuthService {
       // For security, don't reveal if email exists or not
       return ApiResponse.success(
         null,
-        "Password reset email sent successfully"
+        "Password reset email sent successfully",
       );
     }
 
@@ -459,7 +461,7 @@ export class AuthService {
   }
 
   async resetPassword(
-    resetPasswordDto: ResetPasswordDto
+    resetPasswordDto: ResetPasswordDto,
   ): Promise<ApiResponse<null>> {
     const { email, password, token } = resetPasswordDto;
 
@@ -486,7 +488,7 @@ export class AuthService {
   }
 
   async refreshToken(
-    refreshToken: string
+    refreshToken: string,
   ): Promise<ApiResponse<SigninResponse>> {
     try {
       // Verify refresh token
@@ -538,7 +540,7 @@ export class AuthService {
   async logout(
     userId: string,
     token?: string,
-    refreshToken?: string
+    refreshToken?: string,
   ): Promise<ApiResponse<null>> {
     try {
       // Find user and clear refresh token field
@@ -602,7 +604,7 @@ export class AuthService {
           const existingRefresh = await this.invalidatedTokenRepository.findOne(
             {
               where: { tokenHash: refreshTokenHash },
-            }
+            },
           );
 
           if (!existingRefresh) {
@@ -630,7 +632,7 @@ export class AuthService {
 
   async getUserSession(
     userId: string,
-    userIP?: string
+    userIP?: string,
   ): Promise<ApiResponse<UserSessionResponse>> {
     const user = await this.userRepository.findOne({
       where: { id: userId },
@@ -682,12 +684,14 @@ export class AuthService {
     });
 
     // Get primary role (first role or default to USER)
-    const primaryRole = userRoles.length > 0 ? userRoles[0].role : UserRoleType.USER;
+    const primaryRole =
+      userRoles.length > 0 ? userRoles[0].role : UserRoleType.USER;
 
     // Build display name from firstName and lastName
-    const displayName = user.displayName || 
-      (user.firstName || user.lastName 
-        ? `${user.firstName || ""} ${user.lastName || ""}`.trim() 
+    const displayName =
+      user.displayName ||
+      (user.firstName || user.lastName
+        ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
         : undefined);
 
     // Return session response format matching frontend expectations (IGetSessionResponse)

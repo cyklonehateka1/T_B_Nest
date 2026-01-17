@@ -41,7 +41,7 @@ export class MatchSyncService {
     @InjectRepository(Provider)
     private readonly providerRepository: Repository<Provider>,
     private readonly oddsApiClient: TheOddsApiClientService,
-    private readonly dataSource: DataSource
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -52,7 +52,7 @@ export class MatchSyncService {
    */
   async syncMatchesForAllActiveLeagues(days: number): Promise<number> {
     this.logger.log(
-      `Starting match sync for top 5 European leagues (next ${days} days)`
+      `Starting match sync for top 5 European leagues (next ${days} days)`,
     );
 
     const startDate = new Date();
@@ -67,17 +67,17 @@ export class MatchSyncService {
         const syncedCount = await this.syncMatchesForLeague(
           leagueExternalId,
           startDate,
-          endDate
+          endDate,
         );
         totalSyncedCount += syncedCount;
         this.logger.log(
-          `Successfully synced ${syncedCount} matches for league: ${leagueExternalId}`
+          `Successfully synced ${syncedCount} matches for league: ${leagueExternalId}`,
         );
       } catch (error: any) {
         totalErrorCount++;
         this.logger.error(
           `Error syncing matches for league ${leagueExternalId}: ${error.message}`,
-          error.stack
+          error.stack,
         );
         // Continue with other leagues even if one fails
       }
@@ -85,12 +85,12 @@ export class MatchSyncService {
 
     if (totalErrorCount > 0) {
       this.logger.warn(
-        `Failed to sync ${totalErrorCount} leagues out of ${MatchSyncService.TOP_5_EUROPEAN_LEAGUES.length} total`
+        `Failed to sync ${totalErrorCount} leagues out of ${MatchSyncService.TOP_5_EUROPEAN_LEAGUES.length} total`,
       );
     }
 
     this.logger.log(
-      `Successfully synced ${totalSyncedCount} matches across ${MatchSyncService.TOP_5_EUROPEAN_LEAGUES.length - totalErrorCount} leagues`
+      `Successfully synced ${totalSyncedCount} matches across ${MatchSyncService.TOP_5_EUROPEAN_LEAGUES.length - totalErrorCount} leagues`,
     );
     return totalSyncedCount;
   }
@@ -104,7 +104,7 @@ export class MatchSyncService {
    */
   async syncMatchesForLeagueDays(
     leagueExternalId: string,
-    days: number
+    days: number,
   ): Promise<number> {
     const startDate = new Date();
     const endDate = new Date(startDate);
@@ -123,22 +123,22 @@ export class MatchSyncService {
   async syncMatchesForLeague(
     leagueExternalId: string,
     startDate: Date,
-    endDate: Date
+    endDate: Date,
   ): Promise<number> {
     return this.syncMatchesForLeagueByDateRangeImpl(
       leagueExternalId,
       startDate,
-      endDate
+      endDate,
     );
   }
 
   private async syncMatchesForLeagueByDateRangeImpl(
     leagueExternalId: string,
     startDate: Date,
-    endDate: Date
+    endDate: Date,
   ): Promise<number> {
     this.logger.log(
-      `Starting match sync for league: ${leagueExternalId} from ${startDate.toISOString()} to ${endDate.toISOString()}`
+      `Starting match sync for league: ${leagueExternalId} from ${startDate.toISOString()} to ${endDate.toISOString()}`,
     );
 
     try {
@@ -169,7 +169,7 @@ export class MatchSyncService {
 
       // Fetch matches from API with required markets
       this.logger.debug(
-        `Fetching matches for league: ${leagueExternalId} using markets: ${MatchSyncService.ALL_MARKETS}`
+        `Fetching matches for league: ${leagueExternalId} using markets: ${MatchSyncService.ALL_MARKETS}`,
       );
 
       let matchesJson: string;
@@ -180,22 +180,22 @@ export class MatchSyncService {
           MatchSyncService.ALL_MARKETS,
           startDateStr,
           endDateStr,
-          "decimal"
+          "decimal",
         );
       } catch (error: any) {
         this.logger.error(
           `Error fetching matches from API for league ${leagueExternalId}: ${error.message}`,
-          error.stack
+          error.stack,
         );
         throw new Error(
-          `Failed to fetch matches from API for league: ${leagueExternalId}`
+          `Failed to fetch matches from API for league: ${leagueExternalId}`,
         );
       }
 
       // Handle empty or null response gracefully
       if (!matchesJson || matchesJson.trim() === "") {
         this.logger.warn(
-          `Empty response from API for league: ${leagueExternalId}`
+          `Empty response from API for league: ${leagueExternalId}`,
         );
         return 0;
       }
@@ -203,7 +203,7 @@ export class MatchSyncService {
       // Parse matches from JSON
       const matches = this.parseMatchesJson(matchesJson);
       this.logger.log(
-        `Parsed ${matches.length} matches from API for league: ${leagueExternalId}`
+        `Parsed ${matches.length} matches from API for league: ${leagueExternalId}`,
       );
 
       // Process and save matches (each in its own transaction to prevent one failure from aborting all)
@@ -214,7 +214,7 @@ export class MatchSyncService {
         try {
           const match = await this.processAndSaveMatchInNewTransaction(
             matchData,
-            league
+            league,
           );
           if (match) {
             syncedCount++;
@@ -225,7 +225,7 @@ export class MatchSyncService {
           errorCount++;
           const matchId = matchData.id || "unknown";
           this.logger.error(
-            `Error processing match ${matchId} for league ${leagueExternalId}: ${error.message}`
+            `Error processing match ${matchId} for league ${leagueExternalId}: ${error.message}`,
           );
           // Continue processing other matches - each match has its own transaction
         }
@@ -233,18 +233,18 @@ export class MatchSyncService {
 
       if (errorCount > 0) {
         this.logger.warn(
-          `Failed to process ${errorCount} matches for league: ${leagueExternalId}`
+          `Failed to process ${errorCount} matches for league: ${leagueExternalId}`,
         );
       }
 
       this.logger.log(
-        `Successfully synced ${syncedCount} matches for league: ${leagueExternalId}`
+        `Successfully synced ${syncedCount} matches for league: ${leagueExternalId}`,
       );
       return syncedCount;
     } catch (error: any) {
       this.logger.error(
         `Error syncing matches for league ${leagueExternalId}: ${error.message}`,
-        error.stack
+        error.stack,
       );
       throw new Error(`Failed to sync matches for league: ${leagueExternalId}`);
     }
@@ -269,7 +269,7 @@ export class MatchSyncService {
         // API returned an object (likely an error response)
         if (root.message) {
           this.logger.warn(
-            `API returned error object. Message: ${root.message}`
+            `API returned error object. Message: ${root.message}`,
           );
         } else if (root.error) {
           this.logger.warn(`API returned error object. Error: ${root.error}`);
@@ -277,7 +277,7 @@ export class MatchSyncService {
           const responseContent =
             json.length > 500 ? json.substring(0, 500) : json;
           this.logger.warn(
-            `API returned object instead of array. Response content: ${responseContent}`
+            `API returned object instead of array. Response content: ${responseContent}`,
           );
         }
         return [];
@@ -286,7 +286,7 @@ export class MatchSyncService {
       const preview = json && json.length > 500 ? json.substring(0, 500) : json;
       this.logger.error(
         `Error parsing matches JSON: ${error.message}. First 500 chars: ${preview}`,
-        error.stack
+        error.stack,
       );
       return [];
     }
@@ -298,7 +298,7 @@ export class MatchSyncService {
    */
   private async processAndSaveMatchInNewTransaction(
     matchData: any,
-    league: League
+    league: League,
   ): Promise<MatchData | null> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -308,7 +308,7 @@ export class MatchSyncService {
       const result = await this.processAndSaveMatch(
         matchData,
         league,
-        queryRunner
+        queryRunner,
       );
       await queryRunner.commitTransaction();
       return result;
@@ -327,7 +327,7 @@ export class MatchSyncService {
   private async processAndSaveMatch(
     matchData: any,
     league: League,
-    queryRunner: QueryRunner
+    queryRunner: QueryRunner,
   ): Promise<MatchData | null> {
     try {
       // Extract external ID (required)
@@ -361,7 +361,7 @@ export class MatchSyncService {
         match.matchDatetime = matchDatetime;
       } catch (error: any) {
         this.logger.warn(
-          `Match ${externalId} has invalid commence_time format: ${commenceTimeStr}, skipping`
+          `Match ${externalId} has invalid commence_time format: ${commenceTimeStr}, skipping`,
         );
         return null;
       }
@@ -377,7 +377,7 @@ export class MatchSyncService {
         awayTeamName.trim() === ""
       ) {
         this.logger.warn(
-          `Match ${externalId} missing team names (home: ${homeTeamName}, away: ${awayTeamName}), skipping`
+          `Match ${externalId} missing team names (home: ${homeTeamName}, away: ${awayTeamName}), skipping`,
         );
         return null;
       }
@@ -392,17 +392,17 @@ export class MatchSyncService {
         homeTeam = await this.getOrCreateTeamWithRetry(
           homeTeamName,
           country,
-          queryRunner
+          queryRunner,
         );
         awayTeam = await this.getOrCreateTeamWithRetry(
           awayTeamName,
           country,
-          queryRunner
+          queryRunner,
         );
       } catch (error: any) {
         this.logger.error(
           `Error getting/creating teams for match ${externalId}: ${error.message}`,
-          error.stack
+          error.stack,
         );
         throw new Error(`Failed to get/create teams for match: ${externalId}`);
       }
@@ -418,12 +418,12 @@ export class MatchSyncService {
       const oddsObject = this.extractOddsFromMatchData(
         matchData,
         homeTeamName,
-        awayTeamName
+        awayTeamName,
       );
       if (oddsObject && Object.keys(oddsObject).length > 0) {
         match.odds = oddsObject;
         this.logger.debug(
-          `Extracted odds for match ${externalId}: ${JSON.stringify(oddsObject)}`
+          `Extracted odds for match ${externalId}: ${JSON.stringify(oddsObject)}`,
         );
       } else {
         this.logger.debug(`No odds found for match ${externalId}`);
@@ -436,7 +436,7 @@ export class MatchSyncService {
       try {
         const savedMatch = await queryRunner.manager.save(MatchData, match);
         this.logger.debug(
-          `Saved match: ${savedMatch.id} (${externalId}) - ${homeTeamName} vs ${awayTeamName}`
+          `Saved match: ${savedMatch.id} (${externalId}) - ${homeTeamName} vs ${awayTeamName}`,
         );
         return savedMatch;
       } catch (error: any) {
@@ -447,7 +447,7 @@ export class MatchSyncService {
           error.message.includes("duplicate key")
         ) {
           this.logger.warn(
-            `Match ${externalId} already exists in database (unique constraint violation), fetching existing match`
+            `Match ${externalId} already exists in database (unique constraint violation), fetching existing match`,
           );
           const existingMatch = await queryRunner.manager.findOne(MatchData, {
             where: { externalId },
@@ -457,7 +457,7 @@ export class MatchSyncService {
           }
         }
         throw new Error(
-          `Failed to save match due to constraint violation: ${externalId}`
+          `Failed to save match due to constraint violation: ${externalId}`,
         );
       }
     } catch (error: any) {
@@ -466,7 +466,7 @@ export class MatchSyncService {
       }
       this.logger.error(
         `Unexpected error processing match: ${error.message}`,
-        error.stack
+        error.stack,
       );
       throw new Error("Unexpected error processing match");
     }
@@ -479,7 +479,7 @@ export class MatchSyncService {
   private async getOrCreateTeamWithRetry(
     teamName: string,
     country: string | null,
-    queryRunner: QueryRunner
+    queryRunner: QueryRunner,
   ): Promise<Team> {
     try {
       return await this.getOrCreateTeam(teamName, country, queryRunner);
@@ -492,20 +492,20 @@ export class MatchSyncService {
         error.message.includes("duplicate key")
       ) {
         this.logger.debug(
-          `Team ${teamName} already exists (race condition), fetching from DB`
+          `Team ${teamName} already exists (race condition), fetching from DB`,
         );
         const externalId = this.generateTeamExternalId(teamName);
         const existingTeam = await this.fetchExistingTeam(
           teamName,
           externalId,
-          queryRunner
+          queryRunner,
         );
         if (existingTeam) {
           return existingTeam;
         }
       }
       this.logger.error(
-        `Failed to create team ${teamName} and could not find existing team after duplicate key violation`
+        `Failed to create team ${teamName} and could not find existing team after duplicate key violation`,
       );
       throw new Error(`Failed to create team: ${teamName}`);
     }
@@ -518,7 +518,7 @@ export class MatchSyncService {
   private async getOrCreateTeam(
     teamName: string,
     country: string | null,
-    queryRunner: QueryRunner
+    queryRunner: QueryRunner,
   ): Promise<Team> {
     // Try to find by name first
     let team = await queryRunner.manager.findOne(Team, {
@@ -572,7 +572,7 @@ export class MatchSyncService {
   private async fetchExistingTeam(
     teamName: string,
     externalId: string,
-    queryRunner: QueryRunner
+    queryRunner: QueryRunner,
   ): Promise<Team | null> {
     let team = await queryRunner.manager.findOne(Team, {
       where: { name: teamName },
@@ -597,7 +597,7 @@ export class MatchSyncService {
   private extractOddsFromMatchData(
     matchData: any,
     homeTeamName: string,
-    awayTeamName: string
+    awayTeamName: string,
   ): Record<string, any> | null {
     try {
       const bookmakers = matchData.bookmakers;
@@ -654,7 +654,7 @@ export class MatchSyncService {
       const matchResult = this.extractMatchResult(
         marketsMap,
         homeTeamName,
-        awayTeamName
+        awayTeamName,
       );
       if (matchResult && Object.keys(matchResult).length > 0) {
         oddsMap.match_result = matchResult;
@@ -686,7 +686,7 @@ export class MatchSyncService {
       const handicap = this.extractHandicap(
         marketsMap,
         homeTeamName,
-        awayTeamName
+        awayTeamName,
       );
       if (handicap && Object.keys(handicap).length > 0) {
         oddsMap.handicap = handicap;
@@ -696,7 +696,7 @@ export class MatchSyncService {
       // If no odds were extracted, return null
       if (!hasAnyOdds) {
         this.logger.debug(
-          `No valid odds extracted from bookmaker ${bookmakerName}`
+          `No valid odds extracted from bookmaker ${bookmakerName}`,
         );
         return null;
       }
@@ -708,7 +708,7 @@ export class MatchSyncService {
     } catch (error: any) {
       this.logger.warn(
         `Error extracting odds from match data: ${error.message}`,
-        error.stack
+        error.stack,
       );
       return null;
     }
@@ -720,7 +720,7 @@ export class MatchSyncService {
   private extractMatchResult(
     marketsMap: Record<string, any>,
     homeTeamName: string,
-    awayTeamName: string
+    awayTeamName: string,
   ): Record<string, number> | null {
     const h2hMarket = marketsMap["h2h"];
     if (!h2hMarket) {
@@ -775,7 +775,7 @@ export class MatchSyncService {
    * Maps to: over_0_5, under_0_5, over_1_5, under_1_5, over_2_5, under_2_5, over_3_5, under_3_5, over_4_5, under_4_5
    */
   private extractOverUnder(
-    marketsMap: Record<string, any>
+    marketsMap: Record<string, any>,
   ): Record<string, number> | null {
     let totalsMarket = marketsMap["totals"];
     if (!totalsMarket) {
@@ -833,7 +833,7 @@ export class MatchSyncService {
 
   private formatOverUnderKey(
     outcomeName: string,
-    pointValue: number
+    pointValue: number,
   ): string | null {
     const formatted = pointValue.toFixed(1).replace(".", "_");
     if (outcomeName.toLowerCase().startsWith("over")) {
@@ -848,7 +848,7 @@ export class MatchSyncService {
    * Extract both teams to score odds (btts) from btts market
    */
   private extractBtts(
-    marketsMap: Record<string, any>
+    marketsMap: Record<string, any>,
   ): Record<string, number> | null {
     const bttsMarket = marketsMap["btts"];
     if (!bttsMarket) {
@@ -900,7 +900,7 @@ export class MatchSyncService {
    * Maps to: home_draw, home_away, away_draw
    */
   private extractDoubleChance(
-    marketsMap: Record<string, any>
+    marketsMap: Record<string, any>,
   ): Record<string, number> | null {
     const doubleChanceMarket = marketsMap["double_chance"];
     if (!doubleChanceMarket) {
@@ -951,7 +951,7 @@ export class MatchSyncService {
   private extractHandicap(
     marketsMap: Record<string, any>,
     homeTeamName: string,
-    awayTeamName: string
+    awayTeamName: string,
   ): Record<string, number> | null {
     let spreadsMarket = marketsMap["spreads"];
     if (!spreadsMarket) {
@@ -991,7 +991,7 @@ export class MatchSyncService {
         outcomeName,
         pointValue,
         homeTeamName,
-        awayTeamName
+        awayTeamName,
       );
 
       if (key) {
@@ -1006,7 +1006,7 @@ export class MatchSyncService {
     outcomeName: string,
     pointValue: number,
     homeTeamName: string,
-    awayTeamName: string
+    awayTeamName: string,
   ): string | null {
     const normalizedName = outcomeName.toUpperCase();
     const normalizedHomeTeam = homeTeamName ? homeTeamName.toUpperCase() : "";

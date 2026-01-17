@@ -9,32 +9,41 @@ import {
   JoinColumn,
   Unique,
   VersionColumn,
-} from 'typeorm';
-import { User } from './user.entity';
+} from "typeorm";
+import { User } from "./user.entity";
 
-@Entity('user_wallets')
-@Index('idx_user_wallets_user_id', ['user'])
-@Unique('uk_user_wallets_user', ['user'])
+@Entity("user_wallets")
+@Index("idx_user_wallets_user_id", ["user"])
+@Unique("uk_user_wallets_user", ["user"])
 export class UserWallet {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @OneToOne(() => User, { nullable: false })
-  @JoinColumn({ name: 'user_id', foreignKeyConstraintName: 'fk_user_wallets_user' })
+  @JoinColumn({
+    name: "user_id",
+    foreignKeyConstraintName: "fk_user_wallets_user",
+  })
   user: User;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: false, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: false,
+    default: 0,
+  })
   balance: number;
 
-  @Column({ type: 'varchar', length: 3, nullable: false, default: 'GHS' })
+  @Column({ type: "varchar", length: 3, nullable: false, default: "GHS" })
   currency: string;
 
-  @VersionColumn({ name: 'version', nullable: false })
+  @VersionColumn({ name: "version", nullable: false })
   version: number;
 
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt: Date;
 }

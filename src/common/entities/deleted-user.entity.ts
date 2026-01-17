@@ -4,25 +4,25 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-} from 'typeorm';
-import { Exclude } from 'class-transformer';
-import { IsEmail, IsString, IsEnum, IsOptional } from 'class-validator';
+} from "typeorm";
+import { Exclude } from "class-transformer";
+import { IsEmail, IsString, IsEnum, IsOptional } from "class-validator";
 
 export enum DeletedUserStatus {
-  DELETED = 'deleted',
-  RESTORED = 'restored',
+  DELETED = "deleted",
+  RESTORED = "restored",
 }
 
 export enum DeletionReason {
-  USER_REQUESTED = 'user_requested',
-  ADMIN_DELETED = 'admin_deleted',
-  VIOLATION = 'violation',
-  INACTIVE = 'inactive',
+  USER_REQUESTED = "user_requested",
+  ADMIN_DELETED = "admin_deleted",
+  VIOLATION = "violation",
+  INACTIVE = "inactive",
 }
 
-@Entity('deleted_users')
+@Entity("deleted_users")
 export class DeletedUser {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Column({ unique: true })
@@ -43,18 +43,18 @@ export class DeletedUser {
   password: string;
 
   @Column({
-    type: 'enum',
+    type: "enum",
     enum: DeletedUserStatus,
-    enumName: 'deleted_user_status',
+    enumName: "deleted_user_status",
     default: DeletedUserStatus.DELETED,
   })
   @IsEnum(DeletedUserStatus)
   status: DeletedUserStatus;
 
   @Column({
-    type: 'enum',
+    type: "enum",
     enum: DeletionReason,
-    enumName: 'deletion_reason',
+    enumName: "deletion_reason",
     default: DeletionReason.USER_REQUESTED,
   })
   @IsEnum(DeletionReason)
@@ -88,18 +88,18 @@ export class DeletedUser {
   @IsString()
   dateRegistered: string;
 
-  @Column({ nullable: true, type: 'varchar' })
+  @Column({ nullable: true, type: "varchar" })
   @IsOptional()
   @IsString()
   otp: string | null;
 
-  @Column({ nullable: true, type: 'timestamp' })
+  @Column({ nullable: true, type: "timestamp" })
   otpExpiry: Date | null;
 
-  @Column({ nullable: true, type: 'varchar' })
+  @Column({ nullable: true, type: "varchar" })
   pendingNewEmail: string | null;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   notificationPreferences: Record<string, boolean> | null;
 
   @Column({ nullable: true })

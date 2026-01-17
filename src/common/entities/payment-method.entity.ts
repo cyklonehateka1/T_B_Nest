@@ -6,23 +6,23 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-} from 'typeorm';
-import { IsNotEmpty, IsString, IsBoolean, IsOptional } from 'class-validator';
-import { CountrySettings } from './country-settings.entity';
-import { GlobalPaymentMethod } from './global-payment-method.entity';
+} from "typeorm";
+import { IsNotEmpty, IsString, IsBoolean, IsOptional } from "class-validator";
+import { CountrySettings } from "./country-settings.entity";
+import { GlobalPaymentMethod } from "./global-payment-method.entity";
 
 export enum PaymentMethodType {
-  MOBILE_MONEY = 'mobile_money',
-  BANK_CARD = 'bank_card',
-  BANK_TRANSFER = 'bank_transfer',
-  CASH = 'cash',
-  CRYPTO = 'crypto',
-  OTHER = 'other',
+  MOBILE_MONEY = "mobile_money",
+  BANK_CARD = "bank_card",
+  BANK_TRANSFER = "bank_transfer",
+  CASH = "cash",
+  CRYPTO = "crypto",
+  OTHER = "other",
 }
 
-@Entity('payment_methods')
+@Entity("payment_methods")
 export class PaymentMethod {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Column()
@@ -30,15 +30,15 @@ export class PaymentMethod {
   @IsNotEmpty()
   name: string;
 
-  @Column('text')
+  @Column("text")
   @IsString()
   @IsNotEmpty()
   description: string;
 
   @Column({
-    type: 'enum',
+    type: "enum",
     enum: PaymentMethodType,
-    enumName: 'payment_method_type',
+    enumName: "payment_method_type",
   })
   @IsString()
   type: PaymentMethodType;
@@ -48,7 +48,7 @@ export class PaymentMethod {
   enabled: boolean;
 
   // Additional configuration fields
-  @Column('json', { nullable: true })
+  @Column("json", { nullable: true })
   @IsOptional()
   configuration?: Record<string, any>;
 
@@ -58,8 +58,8 @@ export class PaymentMethod {
   @IsNotEmpty()
   countrySettingsId: string;
 
-  @ManyToOne(() => CountrySettings, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'countrySettingsId' })
+  @ManyToOne(() => CountrySettings, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "countrySettingsId" })
   countrySettings: CountrySettings;
 
   // Global payment method relationship (optional for backward compatibility)
@@ -68,7 +68,7 @@ export class PaymentMethod {
   globalPaymentMethodId?: string;
 
   @ManyToOne(() => GlobalPaymentMethod, { nullable: true })
-  @JoinColumn({ name: 'globalPaymentMethodId' })
+  @JoinColumn({ name: "globalPaymentMethodId" })
   globalPaymentMethod?: GlobalPaymentMethod;
 
   @CreateDateColumn()

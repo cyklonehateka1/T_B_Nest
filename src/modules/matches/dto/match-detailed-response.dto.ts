@@ -1,5 +1,8 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { LeagueBasicInfoDto, TeamBasicInfoDto } from "./match-basic-response.dto";
+import {
+  LeagueBasicInfoDto,
+  TeamBasicInfoDto,
+} from "./match-basic-response.dto";
 
 export class OddsValueDto {
   @ApiProperty({ example: 2.5, required: false })
@@ -50,22 +53,46 @@ export class HandicapOddsDto {
 }
 
 export class MatchOddsDto {
-  @ApiProperty({ type: OddsValueDto, required: false, description: "Match Result (1X2)" })
+  @ApiProperty({
+    type: OddsValueDto,
+    required: false,
+    description: "Match Result (1X2)",
+  })
   matchResult?: OddsValueDto | null;
 
-  @ApiProperty({ type: [OverUnderOddsDto], required: false, description: "Over/Under" })
+  @ApiProperty({
+    type: [OverUnderOddsDto],
+    required: false,
+    description: "Over/Under",
+  })
   overUnder?: OverUnderOddsDto[] | null;
 
-  @ApiProperty({ type: OddsValueDto, required: false, description: "Both Teams to Score" })
+  @ApiProperty({
+    type: OddsValueDto,
+    required: false,
+    description: "Both Teams to Score",
+  })
   bothTeamsToScore?: OddsValueDto | null;
 
-  @ApiProperty({ type: OddsValueDto, required: false, description: "Double Chance" })
+  @ApiProperty({
+    type: OddsValueDto,
+    required: false,
+    description: "Double Chance",
+  })
   doubleChance?: OddsValueDto | null;
 
-  @ApiProperty({ type: [HandicapOddsDto], required: false, description: "Handicap" })
+  @ApiProperty({
+    type: [HandicapOddsDto],
+    required: false,
+    description: "Handicap",
+  })
   handicap?: HandicapOddsDto[] | null;
 
-  @ApiProperty({ type: Object, required: false, description: "Additional markets" })
+  @ApiProperty({
+    type: Object,
+    required: false,
+    description: "Additional markets",
+  })
   otherMarkets?: Record<string, any> | null;
 }
 
@@ -103,6 +130,10 @@ export class MatchDetailedResponseDto {
   @ApiProperty({ example: "2023/2024", required: false })
   season?: string | null;
 
-  @ApiProperty({ type: MatchOddsDto, required: false, description: "Odds data for tipsters" })
+  @ApiProperty({
+    type: MatchOddsDto,
+    required: false,
+    description: "Odds data for tipsters",
+  })
   odds?: MatchOddsDto | null;
 }
