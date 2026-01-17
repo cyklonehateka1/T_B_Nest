@@ -7,7 +7,7 @@ export class TipsterBasicInfoDto {
   @ApiProperty({ example: "John Doe" })
   displayName?: string;
 
-  @ApiProperty({ example: "https://example.com/avatar.png", required: false })
+  @ApiProperty({ example: "https://example.com/avatar.png" })
   avatarUrl?: string | null;
 
   @ApiProperty({ example: true })

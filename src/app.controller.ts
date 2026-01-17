@@ -6,12 +6,10 @@ import {
   ApiResponse as NestApiResponse,
 } from "@nestjs/swagger";
 import { ApiResponse } from "./common/dto/api-response.dto";
-
 @ApiTags("App")
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
-
   @Get()
   @ApiOperation({ summary: "Get application status" })
   @NestApiResponse({

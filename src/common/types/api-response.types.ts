@@ -2,20 +2,16 @@ import { User } from "../entities/user.entity";
 import { UserRoleType } from "../enums/user-role-type.enum";
 import { UserStatus } from "../enums/user-status.enum";
 import { UserInvite } from "../entities/user-invite.entity";
-
-// Auth Response Types
 export interface SigninResponse {
   accessToken: string;
   refreshToken: string;
 }
-
 export interface VerifyInviteResponse {
   email: string;
   roleId: UserRoleType;
   role: UserRoleType;
   token: string;
 }
-
 export interface InviteUserResponse {
   id: string;
   email: string;
@@ -23,7 +19,6 @@ export interface InviteUserResponse {
   status: string;
   createdAt: string;
 }
-
 export interface GeolocationData {
   countryCode: string;
   countryName: string;
@@ -32,21 +27,19 @@ export interface GeolocationData {
   detectionMethod: "ip" | "default";
   confidence: "high" | "medium" | "low";
 }
-
 export interface UserSessionResponse {
   id: string;
   email: string;
   firstName?: string;
   lastName?: string;
   role: UserRoleType;
-  roles?: UserRoleType[]; // All roles for the user
+  roles?: UserRoleType[];
   phoneNumber?: string;
   country?: string;
   imagePath?: string;
   isVerified: boolean;
-  geolocation?: GeolocationData; // Only included when user is authenticated
+  geolocation?: GeolocationData;
 }
-
 export interface UserProfileResponse {
   id: string;
   email: string;
@@ -54,7 +47,7 @@ export interface UserProfileResponse {
   lastName: string;
   fullName: string;
   role: UserRoleType;
-  roles?: UserRoleType[]; // All roles for the user
+  roles?: UserRoleType[];
   status: UserStatus;
   phoneNumber?: string;
   country?: string;
@@ -67,15 +60,13 @@ export interface UserProfileResponse {
   updatedAt: string;
   notificationPreferences?: Record<string, boolean>;
 }
-
-// User Response Types
 export interface UserResponse {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
   role: UserRoleType;
-  roles?: UserRoleType[]; // All roles for the user
+  roles?: UserRoleType[];
   status: UserStatus;
   phoneNumber?: string;
   imagePath?: string;
@@ -83,7 +74,6 @@ export interface UserResponse {
   createdAt: string;
   updatedAt: string;
 }
-
 export interface UserStatsResponse {
   totalUsers: number;
   activeUsers: number;
@@ -97,8 +87,6 @@ export interface UserStatsResponse {
   };
   recentUsers: UserResponse[];
 }
-
-// Product Response Types
 export interface ConvertedDenomination {
   originalAmount: number;
   originalCurrency: string;
@@ -106,7 +94,6 @@ export interface ConvertedDenomination {
   convertedCurrency: string;
   exchangeRate: number;
 }
-
 export interface ProductResponse {
   id: string;
   name: string;
@@ -134,7 +121,6 @@ export interface ProductResponse {
   createdAt: string;
   updatedAt: string;
 }
-
 export interface ProductStatsResponse {
   totalProducts: number;
   activeProducts: number;
@@ -144,8 +130,6 @@ export interface ProductStatsResponse {
   };
   recentProducts: ProductResponse[];
 }
-
-// Transaction Response Types
 export interface TransactionResponse {
   id: string;
   orderNumber: string;
@@ -156,7 +140,6 @@ export interface TransactionResponse {
   createdAt: string;
   items: OrderItemResponse[];
 }
-
 export interface OrderItemResponse {
   id: string;
   productName: string;
@@ -166,7 +149,6 @@ export interface OrderItemResponse {
   totalPrice: number;
   productImagePath?: string;
 }
-
 export interface TransactionStatsResponse {
   totalTransactions: number;
   totalRevenue: number;
@@ -176,8 +158,6 @@ export interface TransactionStatsResponse {
   };
   recentTransactions: TransactionResponse[];
 }
-
-// Dashboard Response Types
 export interface DashboardStatsResponse {
   users: {
     total: number;
@@ -201,8 +181,6 @@ export interface DashboardStatsResponse {
     recentTransactions: TransactionResponse[];
   };
 }
-
-// Settings Response Types
 export interface SettingResponse {
   id: string;
   key: string;
@@ -211,8 +189,6 @@ export interface SettingResponse {
   isPublic: boolean;
   updatedAt: string;
 }
-
-// Notification Response Types
 export interface NotificationResponse {
   id: string;
   title: string;
@@ -222,8 +198,6 @@ export interface NotificationResponse {
   metadata?: Record<string, any>;
   createdAt: string;
 }
-
-// Health Check Response Types
 export interface HealthCheckResponse {
   status: string;
   timestamp: string;
@@ -240,8 +214,6 @@ export interface HealthCheckResponse {
     percentage: number;
   };
 }
-
-// Pagination Types
 export interface PaginatedResponse<T> {
   data: T[];
   total: number;
@@ -249,8 +221,6 @@ export interface PaginatedResponse<T> {
   limit: number;
   totalPages: number;
 }
-
-// Generic Response Types
 export type ApiResponseData =
   | SigninResponse
   | VerifyInviteResponse
@@ -271,8 +241,6 @@ export type ApiResponseData =
   | PaginatedResponse<ProductResponse>
   | PaginatedResponse<TransactionResponse>
   | null;
-
-// Audit Log Types
 export interface AuditLogData {
   oldValues?: Record<string, any>;
   newValues?: Record<string, any>;

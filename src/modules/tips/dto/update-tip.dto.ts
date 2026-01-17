@@ -7,12 +7,6 @@ import {
   Max,
   MaxLength,
 } from "class-validator";
-
-/**
- * DTO for updating a tip
- * Only allows updating title, description, and price
- * Tip can only be updated if it's not published (isPublished = false)
- */
 export class UpdateTipDto {
   @ApiProperty({
     description: "Title of the tip",
@@ -24,7 +18,6 @@ export class UpdateTipDto {
   @IsOptional()
   @MaxLength(255, { message: "Title must not exceed 255 characters" })
   title?: string;
-
   @ApiProperty({
     description: "Description of the tip (optional)",
     example: "Top picks for this weekend's Premier League matches",
@@ -33,7 +26,6 @@ export class UpdateTipDto {
   @IsString({ message: "Description must be a string" })
   @IsOptional()
   description?: string;
-
   @ApiProperty({
     description: "Price of the tip (0 for free, 1-100 USD for paid tips)",
     example: 10.5,

@@ -13,7 +13,6 @@ import { Tip } from "./tip.entity";
 import { User } from "./user.entity";
 import { PurchaseStatusType } from "../enums/purchase-status-type.enum";
 import { TipStatusType } from "../enums/tip-status-type.enum";
-
 @Entity("purchases")
 @Index("idx_purchases_tip_id", ["tip"])
 @Index("idx_purchases_buyer_id", ["buyer"])
@@ -24,21 +23,17 @@ import { TipStatusType } from "../enums/tip-status-type.enum";
 export class Purchase {
   @PrimaryGeneratedColumn("uuid")
   id: string;
-
   @ManyToOne(() => Tip, { nullable: false })
   @JoinColumn({ name: "tip_id", foreignKeyConstraintName: "fk_purchases_tip" })
   tip: Tip;
-
   @ManyToOne(() => User, { nullable: false })
   @JoinColumn({
     name: "buyer_id",
     foreignKeyConstraintName: "fk_purchases_buyer",
   })
   buyer: User;
-
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: false })
   amount: number;
-
   @Column({
     type: "enum",
     enum: PurchaseStatusType,
@@ -47,7 +42,6 @@ export class Purchase {
     default: PurchaseStatusType.PENDING,
   })
   status: PurchaseStatusType;
-
   @Column({
     name: "payment_reference",
     type: "varchar",
@@ -55,7 +49,6 @@ export class Purchase {
     nullable: true,
   })
   paymentReference?: string;
-
   @Column({
     name: "payment_method",
     type: "varchar",
@@ -63,7 +56,6 @@ export class Purchase {
     nullable: true,
   })
   paymentMethod?: string;
-
   @Column({
     name: "payment_gateway",
     type: "varchar",
@@ -71,7 +63,6 @@ export class Purchase {
     nullable: true,
   })
   paymentGateway?: string;
-
   @Column({
     name: "tip_outcome",
     type: "enum",
@@ -80,19 +71,14 @@ export class Purchase {
     nullable: true,
   })
   tipOutcome?: TipStatusType;
-
   @Column({ name: "refunded_at", type: "timestamptz", nullable: true })
   refundedAt?: Date;
-
   @Column({ name: "refund_reason", type: "text", nullable: true })
   refundReason?: string;
-
   @Column({ name: "purchased_at", type: "timestamptz", nullable: false })
   purchasedAt: Date;
-
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
-
   @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt: Date;
 }

@@ -26,7 +26,6 @@ import { DeleteAccountDto } from "./dto/delete-account.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { ResendOtpDto } from "./dto/resend-otp.dto";
-
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { User } from "../../common/entities/user.entity";
@@ -35,58 +34,42 @@ import {
   SigninResponse,
   UserSessionResponse,
 } from "../../common/types/api-response.types";
-
-// Response DTOs for Swagger documentation
 class SigninResponseDto {
   @ApiProperty({ example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." })
   accessToken: string;
-
   @ApiProperty({ example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." })
   refreshToken: string;
 }
-
 class RegisterResponseDto {
   @ApiProperty({ example: "OTP sent to your email" })
   message: string;
-
   @ApiProperty({ example: "customer@example.com" })
   email: string;
 }
-
 class UserSessionResponseDto {
   @ApiProperty({ example: "user-uuid-here" })
   id: string;
-
   @ApiProperty({ example: "customer@example.com" })
   email: string;
-
   @ApiProperty({ example: "John" })
   firstName: string;
-
   @ApiProperty({ example: "Doe" })
   lastName: string;
-
   @ApiProperty({ example: "customer" })
   role: string;
-
   @ApiProperty({ example: "+1234567890", required: false })
   phoneNumber?: string;
-
   @ApiProperty({ example: "US", required: false })
   country?: string;
-
   @ApiProperty({ example: "/uploads/profile.jpg", required: false })
   imagePath?: string;
-
   @ApiProperty({ example: true })
   isVerified: boolean;
 }
-
 @ApiTags("Authentication")
 @Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
-
   @Post("login")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -139,7 +122,6 @@ export class AuthController {
   async login(@Body() signinDto: SigninDto): Promise<ApiResponseClass<any>> {
     return await this.authService.login(signinDto);
   }
-
   @Post("register")
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
@@ -195,7 +177,6 @@ export class AuthController {
   ): Promise<ApiResponseClass<{ message: string; email: string }>> {
     return await this.authService.register(registerDto);
   }
-
   @Post("verify-otp")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -246,7 +227,6 @@ export class AuthController {
   ): Promise<ApiResponseClass<SigninResponse>> {
     return await this.authService.verifyOtp(verifyOtpDto);
   }
-
   @Post("resend-otp")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -293,7 +273,6 @@ export class AuthController {
   ): Promise<ApiResponseClass<{ message: string }>> {
     return await this.authService.resendOtp(resendOtpDto.email);
   }
-
   @Post("change-password")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -346,7 +325,6 @@ export class AuthController {
       currentUser,
     );
   }
-
   @Post("delete-account")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -396,7 +374,6 @@ export class AuthController {
   ): Promise<ApiResponseClass<null>> {
     return await this.authService.deleteAccount(deleteAccountDto, currentUser);
   }
-
   @Post("forgot-password")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -431,7 +408,6 @@ export class AuthController {
   ): Promise<ApiResponseClass<null>> {
     return await this.authService.forgotPassword(forgotPasswordDto);
   }
-
   @Post("reset-password")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -468,7 +444,6 @@ export class AuthController {
   ): Promise<ApiResponseClass<null>> {
     return await this.authService.resetPassword(resetPasswordDto);
   }
-
   @Post("refresh-token")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -506,7 +481,6 @@ export class AuthController {
   ): Promise<ApiResponseClass<SigninResponse>> {
     return await this.authService.refreshToken(body.refreshToken);
   }
-
   @Post("logout")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -531,13 +505,11 @@ export class AuthController {
     @Req() req: Request,
     @Body() body?: { refreshToken?: string },
   ): Promise<ApiResponseClass<null>> {
-    // Extract token from Authorization header
     const authHeader = req.headers.authorization;
     const token = authHeader?.replace("Bearer ", "");
     const refreshToken = body?.refreshToken;
     return await this.authService.logout(currentUser.id, token, refreshToken);
   }
-
   @Get("session")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -578,7 +550,6 @@ export class AuthController {
   ): Promise<ApiResponseClass<any>> {
     return await this.authService.getSession(currentUser.id);
   }
-
   @Post("get-user-session")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -613,20 +584,16 @@ export class AuthController {
     @CurrentUser() currentUser: User,
     @Req() req: Request,
   ): Promise<ApiResponseClass<UserSessionResponse>> {
-    // Extract IP address from request
     const userIP = this.extractUserIP(req);
     return await this.authService.getUserSession(currentUser.id, userIP);
   }
-
   private extractUserIP(req: Request): string {
-    // Try different headers for IP address
     const ip =
       req.headers["x-forwarded-for"]?.toString().split(",")[0] ||
       req.headers["x-real-ip"]?.toString() ||
       req.headers["x-client-ip"]?.toString() ||
       req.socket.remoteAddress ||
-      "127.0.0.1"; // Default fallback
-
+      "127.0.0.1";
     return ip;
   }
 }

@@ -48,7 +48,6 @@ import { PlatformSetting } from "./common/entities/platform-setting.entity";
 import { AppSettings } from "./common/entities/app-settings.entity";
 import { RateLimitingService } from "./common/services/rate-limiting.service";
 import { EnvironmentValidationService } from "./common/services/environment-validation.service";
-
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -56,16 +55,14 @@ import { EnvironmentValidationService } from "./common/services/environment-vali
     TypeOrmModule.forRootAsync({
       useFactory: () => {
         const databaseUrl = process.env.DATABASE_URL;
-
         if (!databaseUrl) {
           throw new Error("DATABASE_URL environment variable is required");
         }
-
         return {
           type: "postgres",
           url: databaseUrl,
           autoLoadEntities: true,
-          synchronize: false, // Turned off - use migrations for existing database
+          synchronize: false,
           extra: {
             charset: "utf8",
           },

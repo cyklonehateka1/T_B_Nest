@@ -8,6 +8,7 @@ import { TipSelection } from "../../common/entities/tip-selection.entity";
 import { MatchData } from "../../common/entities/match-data.entity";
 import { User } from "../../common/entities/user.entity";
 import { AppSettings } from "../../common/entities/app-settings.entity";
+import { Purchase } from "../../common/entities/purchase.entity";
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { AppSettings } from "../../common/entities/app-settings.entity";
       MatchData,
       User,
       AppSettings,
+      Purchase,
     ]),
   ],
   controllers: [TipsController],

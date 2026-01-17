@@ -7,7 +7,6 @@ import {
   UpdateDateColumn,
   Unique,
 } from "typeorm";
-
 @Entity("sports")
 @Index("idx_sports_group", ["sportGroup"])
 @Index("idx_sports_key", ["sportKey"])
@@ -16,7 +15,6 @@ import {
 export class Sport {
   @PrimaryGeneratedColumn("uuid")
   id: string;
-
   @Column({
     name: "sport_key",
     type: "varchar",
@@ -25,13 +23,10 @@ export class Sport {
     nullable: false,
   })
   sportKey: string;
-
   @Column({ type: "varchar", length: 255, nullable: false })
   title: string;
-
   @Column({ type: "text", nullable: true })
   description?: string;
-
   @Column({
     name: "sport_group",
     type: "varchar",
@@ -39,7 +34,6 @@ export class Sport {
     nullable: false,
   })
   sportGroup: string;
-
   @Column({
     name: "is_active",
     type: "boolean",
@@ -47,7 +41,6 @@ export class Sport {
     default: true,
   })
   isActive: boolean;
-
   @Column({
     name: "has_outrights",
     type: "boolean",
@@ -55,10 +48,8 @@ export class Sport {
     default: false,
   })
   hasOutrights: boolean;
-
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
-
   @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt: Date;
 }

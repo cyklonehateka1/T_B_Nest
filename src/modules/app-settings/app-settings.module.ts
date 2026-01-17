@@ -3,7 +3,6 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { AppSettings } from "../../common/entities/app-settings.entity";
 import { AppSettingsController } from "./app-settings.controller";
 import { AppSettingsService } from "./app-settings.service";
-
 @Module({
   imports: [TypeOrmModule.forFeature([AppSettings])],
   controllers: [AppSettingsController],

@@ -11,7 +11,6 @@ import {
 } from "typeorm";
 import { Provider } from "./provider.entity";
 import { Sport } from "./sport.entity";
-
 @Entity("leagues")
 @Index("idx_leagues_name", ["name"])
 @Index("idx_leagues_country", ["country"])
@@ -20,33 +19,26 @@ import { Sport } from "./sport.entity";
 export class League {
   @PrimaryGeneratedColumn("uuid")
   id: string;
-
   @Column({ name: "external_id", type: "varchar", length: 100, nullable: true })
   externalId?: string;
-
   @ManyToOne(() => Provider, { nullable: true })
   @JoinColumn({
     name: "provider_id",
     foreignKeyConstraintName: "fk_leagues_provider",
   })
   provider?: Provider;
-
   @ManyToOne(() => Sport, { nullable: true })
   @JoinColumn({
     name: "sport_id",
     foreignKeyConstraintName: "fk_leagues_sport",
   })
   sport?: Sport;
-
   @Column({ type: "varchar", length: 255, nullable: false })
   name: string;
-
   @Column({ type: "varchar", length: 100, nullable: true })
   country?: string;
-
   @Column({ name: "logo_url", type: "text", nullable: true })
   logoUrl?: string;
-
   @Column({
     name: "is_active",
     type: "boolean",
@@ -54,10 +46,8 @@ export class League {
     default: true,
   })
   isActive: boolean;
-
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
-
   @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt: Date;
 }
