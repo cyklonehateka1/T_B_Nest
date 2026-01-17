@@ -3,8 +3,15 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, MoreThanOrEqual } from "typeorm";
 import { MatchData } from "../../common/entities/match-data.entity";
 import { MatchStatusType } from "../../common/enums/match-status-type.enum";
-import { MatchBasicResponseDto, LeagueBasicInfoDto, TeamBasicInfoDto } from "./dto/match-basic-response.dto";
-import { MatchDetailedResponseDto, MatchOddsDto } from "./dto/match-detailed-response.dto";
+import {
+  MatchBasicResponseDto,
+  LeagueBasicInfoDto,
+  TeamBasicInfoDto,
+} from "./dto/match-basic-response.dto";
+import {
+  MatchDetailedResponseDto,
+  MatchOddsDto,
+} from "./dto/match-detailed-response.dto";
 
 @Injectable()
 export class MatchesService {
@@ -13,11 +20,14 @@ export class MatchesService {
     private readonly matchDataRepository: Repository<MatchData>
   ) {}
 
-  async getUpcomingMatches(leagueId?: string, isTipster: boolean = false): Promise<Array<MatchBasicResponseDto | MatchDetailedResponseDto>> {
+  async getUpcomingMatches(
+    leagueId?: string,
+    isTipster: boolean = false
+  ): Promise<Array<MatchBasicResponseDto | MatchDetailedResponseDto>> {
     const now = new Date();
-    
+
     let matches: MatchData[];
-    
+
     if (leagueId) {
       matches = await this.matchDataRepository
         .createQueryBuilder("match")
@@ -26,7 +36,9 @@ export class MatchesService {
         .innerJoinAndSelect("match.awayTeam", "awayTeam")
         .where("match.league.id = :leagueId", { leagueId })
         .andWhere("match.matchDatetime >= :now", { now })
-        .andWhere("match.status = :status", { status: MatchStatusType.scheduled })
+        .andWhere("match.status = :status", {
+          status: MatchStatusType.scheduled,
+        })
         .orderBy("match.matchDatetime", "ASC")
         .getMany();
     } else {
@@ -36,7 +48,9 @@ export class MatchesService {
         .innerJoinAndSelect("match.homeTeam", "homeTeam")
         .innerJoinAndSelect("match.awayTeam", "awayTeam")
         .where("match.matchDatetime >= :now", { now })
-        .andWhere("match.status = :status", { status: MatchStatusType.scheduled })
+        .andWhere("match.status = :status", {
+          status: MatchStatusType.scheduled,
+        })
         .orderBy("match.matchDatetime", "ASC")
         .getMany();
     }
@@ -48,15 +62,18 @@ export class MatchesService {
     }
   }
 
-  async getUpcomingMatchesByLeagueExternalId(leagueExternalId: string, isTipster: boolean = false): Promise<Array<MatchBasicResponseDto | MatchDetailedResponseDto>> {
+  async getUpcomingMatchesByLeagueExternalId(
+    leagueExternalId: string,
+    isTipster: boolean = false
+  ): Promise<Array<MatchBasicResponseDto | MatchDetailedResponseDto>> {
     const now = new Date();
-    
+
     const matches = await this.matchDataRepository
       .createQueryBuilder("match")
       .innerJoinAndSelect("match.league", "league")
       .innerJoinAndSelect("match.homeTeam", "homeTeam")
       .innerJoinAndSelect("match.awayTeam", "awayTeam")
-      .where("match.league.externalId = :leagueExternalId", { leagueExternalId })
+      .where("league.externalId = :leagueExternalId", { leagueExternalId })
       .andWhere("match.matchDatetime >= :now", { now })
       .andWhere("match.status = :status", { status: MatchStatusType.scheduled })
       .orderBy("match.matchDatetime", "ASC")
