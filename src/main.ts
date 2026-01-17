@@ -81,7 +81,7 @@ async function bootstrap() {
       skip: (req) => {
         return req.url === "/health" || req.url === "/health/live";
       },
-    })
+    }),
   );
 
   // Endpoint-specific rate limiting
@@ -99,7 +99,7 @@ async function bootstrap() {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
-    })
+    }),
   );
 
   // Global interceptors

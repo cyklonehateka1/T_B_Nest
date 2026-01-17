@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import rateLimit from 'express-rate-limit';
-import { Request } from 'express';
+import { Injectable } from "@nestjs/common";
+import rateLimit from "express-rate-limit";
+import { Request } from "express";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -22,15 +22,15 @@ export class RateLimitingService {
       standardHeaders: true,
       legacyHeaders: false,
       message: {
-        error: 'Authentication rate limit exceeded',
+        error: "Authentication rate limit exceeded",
         message:
-          'Too many authentication attempts. Please try again in 15 minutes.',
+          "Too many authentication attempts. Please try again in 15 minutes.",
         statusCode: 429,
       },
       skipSuccessfulRequests: false, // Count all requests, including successful ones
       keyGenerator: (req: AuthenticatedRequest) => {
         // Use IP + user agent for more specific limiting
-        return `${req.ip}-${req.get('User-Agent')}`;
+        return `${req.ip}-${req.get("User-Agent")}`;
       },
     });
   }
@@ -46,8 +46,8 @@ export class RateLimitingService {
       standardHeaders: true,
       legacyHeaders: false,
       message: {
-        error: 'Payment rate limit exceeded',
-        message: 'Too many payment requests. Please try again later.',
+        error: "Payment rate limit exceeded",
+        message: "Too many payment requests. Please try again later.",
         statusCode: 429,
       },
       skipSuccessfulRequests: true, // Don't count successful payments
@@ -70,8 +70,8 @@ export class RateLimitingService {
       standardHeaders: true,
       legacyHeaders: false,
       message: {
-        error: 'Order rate limit exceeded',
-        message: 'Too many order requests. Please try again later.',
+        error: "Order rate limit exceeded",
+        message: "Too many order requests. Please try again later.",
         statusCode: 429,
       },
       skipSuccessfulRequests: true, // Don't count successful orders
@@ -93,8 +93,8 @@ export class RateLimitingService {
       standardHeaders: true,
       legacyHeaders: false,
       message: {
-        error: 'Product browsing rate limit exceeded',
-        message: 'Too many product requests. Please slow down.',
+        error: "Product browsing rate limit exceeded",
+        message: "Too many product requests. Please slow down.",
         statusCode: 429,
       },
       skipSuccessfulRequests: true,
@@ -116,8 +116,8 @@ export class RateLimitingService {
       standardHeaders: true,
       legacyHeaders: false,
       message: {
-        error: 'Resource rate limit exceeded',
-        message: 'Too many resource requests. Please try again later.',
+        error: "Resource rate limit exceeded",
+        message: "Too many resource requests. Please try again later.",
         statusCode: 429,
       },
       skipSuccessfulRequests: true,
@@ -139,8 +139,8 @@ export class RateLimitingService {
       standardHeaders: true,
       legacyHeaders: false,
       message: {
-        error: 'Email rate limit exceeded',
-        message: 'Too many email requests. Please try again in an hour.',
+        error: "Email rate limit exceeded",
+        message: "Too many email requests. Please try again in an hour.",
         statusCode: 429,
       },
       skipSuccessfulRequests: false, // Count all email attempts
@@ -163,8 +163,8 @@ export class RateLimitingService {
       standardHeaders: true,
       legacyHeaders: false,
       message: {
-        error: 'Cart rate limit exceeded',
-        message: 'Too many cart operations. Please slow down.',
+        error: "Cart rate limit exceeded",
+        message: "Too many cart operations. Please slow down.",
         statusCode: 429,
       },
       skipSuccessfulRequests: true,

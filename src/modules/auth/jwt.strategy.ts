@@ -25,7 +25,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
     @InjectRepository(InvalidatedToken)
-    private readonly invalidatedTokenRepository: Repository<InvalidatedToken>
+    private readonly invalidatedTokenRepository: Repository<InvalidatedToken>,
   ) {
     const jwtSecret = process.env.JWT_SECRET;
     if (!jwtSecret) {

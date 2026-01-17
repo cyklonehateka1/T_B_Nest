@@ -30,7 +30,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
       // For non-500 errors, use the exception message (safe to expose)
       if (status !== HttpStatus.INTERNAL_SERVER_ERROR) {
-        if (typeof exceptionResponse === "object" && exceptionResponse !== null) {
+        if (
+          typeof exceptionResponse === "object" &&
+          exceptionResponse !== null
+        ) {
           message = (exceptionResponse as any).message || exception.message;
         } else {
           message = exception.message;
@@ -38,12 +41,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
       } else {
         // For 500 errors, always return a safe generic message
         message = "An unexpected error occurred. Please try again later.";
-        
+
         // Log the actual error details server-side
         if (exception instanceof Error && exception.stack) {
           this.logger.error(
             `Internal Server Error (500): ${exception.message}`,
-            exception.stack
+            exception.stack,
           );
         } else {
           this.logger.error("Internal Server Error (500):", exception);
@@ -52,12 +55,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
     } else {
       // For non-HttpException errors (500 errors), return safe generic message
       message = "An unexpected error occurred. Please try again later.";
-      
+
       // Log the actual error details server-side
       if (exception instanceof Error && exception.stack) {
         this.logger.error(
           `Internal Server Error (500): ${exception.message}`,
-          exception.stack
+          exception.stack,
         );
       } else {
         this.logger.error("Internal Server Error (500):", exception);

@@ -1,4 +1,15 @@
-import { Controller, Get, Post, Patch, Delete, Query, Body, Request, UseGuards, Param } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Query,
+  Body,
+  Request,
+  UseGuards,
+  Param,
+} from "@nestjs/common";
 import {
   ApiTags,
   ApiOperation,
@@ -10,6 +21,7 @@ import {
 import { TipsService } from "./tips.service";
 import { TipsPageResponseDto } from "./dto/tips-page-response.dto";
 import { TipResponseDto } from "./dto/tip-response.dto";
+import { TipEditingResponseDto } from "./dto/tip-editing-response.dto";
 import { CreateTipDto } from "./dto/create-tip.dto";
 import { UpdateTipDto } from "./dto/update-tip.dto";
 import { AddSelectionDto } from "./dto/add-selection.dto";
@@ -134,7 +146,7 @@ export class TipsController {
     @Query("status") status?: string,
     @Query("isFree") isFree?: string | boolean,
     @Query("page") page?: number,
-    @Query("size") size?: number
+    @Query("size") size?: number,
   ): Promise<ApiResponseClass<TipsPageResponseDto>> {
     // Parse page and size with defaults
     const pageNum = page !== undefined ? Number(page) : 0;
@@ -164,7 +176,7 @@ export class TipsController {
       status,
       isFreeBool,
       pageNum,
-      pageSize
+      pageSize,
     );
 
     return ApiResponseClass.success(response, "Tips retrieved successfully");
@@ -298,7 +310,7 @@ export class TipsController {
   })
   async createTip(
     @Body() createTipDto: CreateTipDto,
-    @Request() req: any
+    @Request() req: any,
   ): Promise<ApiResponseClass<TipResponseDto>> {
     const userId = req.user?.id;
 
@@ -309,6 +321,72 @@ export class TipsController {
     const tip = await this.tipsService.createTip(createTipDto, userId);
 
     return ApiResponseClass.success(tip, "Tip created successfully");
+  }
+
+  @Get(":id/editing")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRoleType.TIPSTER)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Get tip details for editing",
+    description:
+      "Get tip details for editing. Only accessible by the tip creator and only if the tip is not published. Returns tip with selections.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Tip details retrieved successfully",
+    type: TipEditingResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Bad request - tip is published",
+    schema: {
+      example: {
+        statusCode: 400,
+        message:
+          "Cannot edit tip: tip has already been published and is available for purchase",
+        success: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 403,
+    description: "Forbidden - user is not the tip owner or not a tipster",
+    schema: {
+      example: {
+        statusCode: 403,
+        message: "You can only edit your own tips",
+        success: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Not found - tip not found",
+    schema: {
+      example: {
+        statusCode: 404,
+        message: "Tip not found: 550e8400-e29b-41d4-a716-446655440000",
+        success: false,
+      },
+    },
+  })
+  async getTipForEditing(
+    @Param("id") tipId: string,
+    @Request() req: any,
+  ): Promise<ApiResponseClass<TipEditingResponseDto>> {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new Error("User ID not found in request");
+    }
+
+    const tip = await this.tipsService.getTipForEditing(tipId, userId);
+
+    return ApiResponseClass.success(
+      tip,
+      "Tip details retrieved successfully"
+    );
   }
 
   @Patch(":id")
@@ -351,7 +429,8 @@ export class TipsController {
     schema: {
       example: {
         statusCode: 400,
-        message: "Cannot update tip: tip has already been published and is available for purchase",
+        message:
+          "Cannot update tip: tip has already been published and is available for purchase",
         success: false,
       },
     },
@@ -381,7 +460,7 @@ export class TipsController {
   async updateTip(
     @Param("id") tipId: string,
     @Body() updateTipDto: UpdateTipDto,
-    @Request() req: any
+    @Request() req: any,
   ): Promise<ApiResponseClass<TipResponseDto>> {
     const userId = req.user?.id;
 
@@ -441,11 +520,13 @@ export class TipsController {
   })
   @ApiResponse({
     status: 400,
-    description: "Bad request - tip is published, invalid data, or max selections reached",
+    description:
+      "Bad request - tip is published, invalid data, or max selections reached",
     schema: {
       example: {
         statusCode: 400,
-        message: "Cannot add selections: tip has already been published and is available for purchase",
+        message:
+          "Cannot add selections: tip has already been published and is available for purchase",
         success: false,
       },
     },
@@ -475,7 +556,7 @@ export class TipsController {
   async addSelection(
     @Param("id") tipId: string,
     @Body() addSelectionDto: AddSelectionDto,
-    @Request() req: any
+    @Request() req: any,
   ): Promise<ApiResponseClass<TipResponseDto>> {
     const userId = req.user?.id;
 
@@ -483,7 +564,11 @@ export class TipsController {
       throw new Error("User ID not found in request");
     }
 
-    const tip = await this.tipsService.addSelection(tipId, addSelectionDto, userId);
+    const tip = await this.tipsService.addSelection(
+      tipId,
+      addSelectionDto,
+      userId,
+    );
 
     return ApiResponseClass.success(tip, "Selection added successfully");
   }
@@ -508,7 +593,8 @@ export class TipsController {
     schema: {
       example: {
         statusCode: 400,
-        message: "Cannot remove selections: tip has already been published and is available for purchase",
+        message:
+          "Cannot remove selections: tip has already been published and is available for purchase",
         success: false,
       },
     },
@@ -538,7 +624,7 @@ export class TipsController {
   async removeSelection(
     @Param("id") tipId: string,
     @Param("selectionId") selectionId: string,
-    @Request() req: any
+    @Request() req: any,
   ): Promise<ApiResponseClass<TipResponseDto>> {
     const userId = req.user?.id;
 
@@ -546,7 +632,11 @@ export class TipsController {
       throw new Error("User ID not found in request");
     }
 
-    const tip = await this.tipsService.removeSelection(tipId, selectionId, userId);
+    const tip = await this.tipsService.removeSelection(
+      tipId,
+      selectionId,
+      userId,
+    );
 
     return ApiResponseClass.success(tip, "Selection removed successfully");
   }

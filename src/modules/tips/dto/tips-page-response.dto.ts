@@ -22,7 +22,8 @@ export class TipsPageResponseDto {
 
   @ApiProperty({
     example: 120,
-    description: "Count of tips where all matches are still valid (scheduled and not started)",
+    description:
+      "Count of tips where all matches are still valid (scheduled and not started)",
   })
   availableTipsCount: number;
 }

@@ -6,41 +6,41 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-} from 'typeorm';
-import { User } from './user.entity';
+} from "typeorm";
+import { User } from "./user.entity";
 
 export enum NotificationType {
-  NEW_ORDER = 'new_order',
-  CURRENCY_RATE_CHANGE = 'currency_rate_change',
-  DAILY_SUMMARY = 'daily_summary',
+  NEW_ORDER = "new_order",
+  CURRENCY_RATE_CHANGE = "currency_rate_change",
+  DAILY_SUMMARY = "daily_summary",
 }
 
-@Entity('admin_notification_preferences')
+@Entity("admin_notification_preferences")
 export class AdminNotificationPreferences {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: "uuid" })
   userId: string;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'userId' })
+  @ManyToOne(() => User, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "userId" })
   user: User;
 
   @Column({
-    type: 'enum',
+    type: "enum",
     enum: NotificationType,
-    enumName: 'notification_type',
+    enumName: "notification_type",
   })
   notificationType: NotificationType;
 
   @Column({ default: true })
   enabled: boolean;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   settings: {
     emailEnabled?: boolean;
-    frequency?: 'instant' | 'daily' | 'weekly';
+    frequency?: "instant" | "daily" | "weekly";
     threshold?: number; // For low stock alerts
     time?: string; // For daily summaries (e.g., "09:00")
   } | null;

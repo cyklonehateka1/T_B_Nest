@@ -50,7 +50,8 @@ export class CreateTipDto {
   price: number;
 
   @ApiProperty({
-    description: "Array of match selections/predictions for this tip (optional for draft tips)",
+    description:
+      "Array of match selections/predictions for this tip (optional for draft tips)",
     type: [CreateTipSelectionDto],
     required: false,
   })

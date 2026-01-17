@@ -10,7 +10,7 @@ export class LeaguesService {
 
   constructor(
     @InjectRepository(League)
-    private readonly leagueRepository: Repository<League>
+    private readonly leagueRepository: Repository<League>,
   ) {}
 
   async getFootballLeagues(): Promise<LeagueResponseDto[]> {
@@ -18,7 +18,7 @@ export class LeaguesService {
   }
 
   async getLeaguesBySportGroup(
-    sportGroup: string
+    sportGroup: string,
   ): Promise<LeagueResponseDto[]> {
     // Single optimized query with JOIN to avoid N+1 problem
     // This fetches all active leagues with their sport relationship in one query

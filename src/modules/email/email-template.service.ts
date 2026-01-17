@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import * as Handlebars from 'handlebars';
+import { Injectable } from "@nestjs/common";
+import * as Handlebars from "handlebars";
 
 export interface InviteTemplateData {
   email: string;
@@ -299,7 +299,7 @@ export class EmailTemplateService {
                     <span>${data.errorMessage}</span>
                 </div>
                 `
-                    : ''
+                    : ""
                 }
             </div>
             
@@ -580,7 +580,7 @@ export class EmailTemplateService {
             <div class="processing-info">
                 <h3 style="margin-top: 0; color: #1e40af;">🔄 Processing Information</h3>
                 <p><strong>Payment Verification:</strong> Our automated system has successfully verified your payment with the payment provider.</p>
-                ${data.processingTime ? `<p><strong>Processing Time:</strong> ${data.processingTime}</p>` : ''}
+                ${data.processingTime ? `<p><strong>Processing Time:</strong> ${data.processingTime}</p>` : ""}
                 <p><strong>Next Steps:</strong> Your order is now being prepared for fulfillment. You'll receive your gift card codes shortly.</p>
             </div>
             
@@ -732,12 +732,12 @@ export class EmailTemplateService {
                 <p>This could be due to a temporary issue with the payment provider or network connectivity.</p>
             </div>
             `
-                : ''
+                : ""
             }
             
             <p>You can try again by visiting your order page and attempting the payment again. If the problem persists, please contact our support team.</p>
             
-            ${data.retryUrl ? `<a href="${data.retryUrl}" class="cta-button">Try Payment Again</a>` : ''}
+            ${data.retryUrl ? `<a href="${data.retryUrl}" class="cta-button">Try Payment Again</a>` : ""}
         </div>
         
         <div class="footer">
@@ -1155,7 +1155,7 @@ export class EmailTemplateService {
                 <p>"${data.personalMessage}"</p>
             </div>
             `
-                : ''
+                : ""
             }
             
             <h3>Your Gift Card Codes:</h3>
@@ -1166,7 +1166,7 @@ export class EmailTemplateService {
                 <div class="gift-code">${code}</div>
                 `,
                   )
-                  .join('')}
+                  .join("")}
             </div>
             
             <p><strong>How to use your gift card:</strong></p>

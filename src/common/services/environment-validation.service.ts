@@ -14,11 +14,11 @@ export class EnvironmentValidationService {
       this.validateRequiredVariables();
       this.validateSecuritySettings();
       this.logger.log(
-        "Production environment validation completed successfully"
+        "Production environment validation completed successfully",
       );
     } else {
       this.logger.log(
-        "Development environment - skipping production validation"
+        "Development environment - skipping production validation",
       );
     }
   }
@@ -59,13 +59,13 @@ export class EnvironmentValidationService {
 
     if (jwtSecret && jwtSecret.length < 32) {
       this.logger.warn(
-        "JWT_SECRET should be at least 32 characters long for production"
+        "JWT_SECRET should be at least 32 characters long for production",
       );
     }
 
     if (jwtRefreshSecret && jwtRefreshSecret.length < 32) {
       this.logger.warn(
-        "JWT_REFRESH_SECRET should be at least 32 characters long for production"
+        "JWT_REFRESH_SECRET should be at least 32 characters long for production",
       );
     }
 
@@ -77,13 +77,13 @@ export class EnvironmentValidationService {
 
     if (jwtSecret && defaultSecrets.includes(jwtSecret)) {
       throw new Error(
-        "JWT_SECRET must be changed from default value in production"
+        "JWT_SECRET must be changed from default value in production",
       );
     }
 
     if (jwtRefreshSecret && defaultSecrets.includes(jwtRefreshSecret)) {
       throw new Error(
-        "JWT_REFRESH_SECRET must be changed from default value in production"
+        "JWT_REFRESH_SECRET must be changed from default value in production",
       );
     }
 
@@ -120,7 +120,7 @@ export class EnvironmentValidationService {
       for (const pattern of suspiciousPatterns) {
         if (databaseUrl.includes(pattern)) {
           this.logger.warn(
-            `DATABASE_URL contains suspicious pattern: ${pattern}`
+            `DATABASE_URL contains suspicious pattern: ${pattern}`,
           );
         }
       }

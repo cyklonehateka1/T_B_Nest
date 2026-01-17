@@ -6,19 +6,19 @@ import {
   UpdateDateColumn,
   ManyToMany,
   JoinTable,
-} from 'typeorm';
-import { IsString, IsEnum, IsOptional, IsObject } from 'class-validator';
-import { GlobalPaymentMethod } from './global-payment-method.entity';
+} from "typeorm";
+import { IsString, IsEnum, IsOptional, IsObject } from "class-validator";
+import { GlobalPaymentMethod } from "./global-payment-method.entity";
 
 export enum PaymentGatewayStatus {
-  ACTIVE = 'active',
-  INACTIVE = 'inactive',
-  MAINTENANCE = 'maintenance',
+  ACTIVE = "active",
+  INACTIVE = "inactive",
+  MAINTENANCE = "maintenance",
 }
 
 export enum PaymentMethodHandlingMode {
-  CHECKOUT_URL = 'checkout_url', // Redirect user to gateway's checkout page
-  DIRECT = 'direct', // Handle payment directly via API (no redirect)
+  CHECKOUT_URL = "checkout_url", // Redirect user to gateway's checkout page
+  DIRECT = "direct", // Handle payment directly via API (no redirect)
 }
 
 /**
@@ -31,30 +31,30 @@ export enum PaymentMethodHandlingMode {
  */
 export type PaymentMethodHandling = Record<string, PaymentMethodHandlingMode>;
 
-@Entity('payment_gateways')
+@Entity("payment_gateways")
 export class PaymentGateway {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Column({ unique: true })
   @IsString()
   name: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   @IsOptional()
   @IsString()
   description: string;
 
   @Column({
-    type: 'enum',
+    type: "enum",
     enum: PaymentGatewayStatus,
-    enumName: 'payment_gateway_status',
+    enumName: "payment_gateway_status",
     default: PaymentGatewayStatus.INACTIVE,
   })
   @IsEnum(PaymentGatewayStatus)
   status: PaymentGatewayStatus;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   @IsOptional()
   @IsObject()
   configuration: any;
@@ -71,21 +71,21 @@ export class PaymentGateway {
    *   "bank_card": "checkout_url"
    * }
    */
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   @IsOptional()
   @IsObject()
   paymentMethodHandling?: PaymentMethodHandling;
 
   @ManyToMany(() => GlobalPaymentMethod)
   @JoinTable({
-    name: 'payment_gateway_global_methods',
+    name: "payment_gateway_global_methods",
     joinColumn: {
-      name: 'paymentGatewayId',
-      referencedColumnName: 'id',
+      name: "paymentGatewayId",
+      referencedColumnName: "id",
     },
     inverseJoinColumn: {
-      name: 'globalPaymentMethodId',
-      referencedColumnName: 'id',
+      name: "globalPaymentMethodId",
+      referencedColumnName: "id",
     },
   })
   globalPaymentMethods: GlobalPaymentMethod[];
@@ -100,7 +100,7 @@ export class PaymentGateway {
   @IsString()
   websiteUrl: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   @IsOptional()
   @IsString()
   notes: string;
@@ -113,7 +113,7 @@ export class PaymentGateway {
    * - "Amounts are in minor units (100 minor units = 1 major unit)"
    * - "Amounts are sent as-is in the base currency unit"
    */
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   @IsOptional()
   @IsString()
   lowestDenomination: string;

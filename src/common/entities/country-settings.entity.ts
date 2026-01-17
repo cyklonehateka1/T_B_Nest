@@ -43,7 +43,7 @@ export class CountrySettings {
   @OneToMany(
     () => PaymentMethod,
     (paymentMethod) => paymentMethod.countrySettings,
-    { cascade: true }
+    { cascade: true },
   )
   paymentMethods: PaymentMethod[];
 

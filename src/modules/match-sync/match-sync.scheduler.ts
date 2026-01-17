@@ -5,12 +5,12 @@ import { MatchSyncService } from "./match-sync.service";
 
 /**
  * Scheduled jobs for automatically syncing matches from The Odds API
- * 
+ *
  * Multiple sync types with different date ranges:
  * - 24-hour sync: Frequent updates for upcoming matches (next 1 day)
  * - Weekly sync: Regular sync for upcoming matches (next 7 days) - DEFAULT ENABLED
  * - Monthly sync: Extended sync for future matches (next 30 days)
- * 
+ *
  * Configuration:
  * - MATCH_SYNC_ENABLED: Enable/disable all scheduled syncs (default: false - ALL DEACTIVATED)
  * - MATCH_SYNC_24H_ENABLED: Enable 24-hour sync (default: false)
@@ -34,33 +34,47 @@ export class MatchSyncScheduler implements OnModuleInit {
   constructor(
     private readonly matchSyncService: MatchSyncService,
     private readonly configService: ConfigService,
-    private readonly schedulerRegistry: SchedulerRegistry
+    private readonly schedulerRegistry: SchedulerRegistry,
   ) {
     // All syncs are disabled by default as requested
-    this.syncEnabled = this.configService.get<string>("MATCH_SYNC_ENABLED") === "true";
-    this.sync24hEnabled = this.configService.get<string>("MATCH_SYNC_24H_ENABLED") === "true";
-    this.syncWeeklyEnabled = this.configService.get<string>("MATCH_SYNC_WEEKLY_ENABLED") === "true";
-    this.syncMonthlyEnabled = this.configService.get<string>("MATCH_SYNC_MONTHLY_ENABLED") === "true";
-    
+    this.syncEnabled =
+      this.configService.get<string>("MATCH_SYNC_ENABLED") === "true";
+    this.sync24hEnabled =
+      this.configService.get<string>("MATCH_SYNC_24H_ENABLED") === "true";
+    this.syncWeeklyEnabled =
+      this.configService.get<string>("MATCH_SYNC_WEEKLY_ENABLED") === "true";
+    this.syncMonthlyEnabled =
+      this.configService.get<string>("MATCH_SYNC_MONTHLY_ENABLED") === "true";
+
     // Intervals match Java defaults
     this.sync24hIntervalMs = parseInt(
       this.configService.get<string>("MATCH_SYNC_24H_INTERVAL_MS") || "7200000",
-      10
+      10,
     ); // 2 hours
     this.syncWeeklyIntervalMs = parseInt(
-      this.configService.get<string>("MATCH_SYNC_WEEKLY_INTERVAL_MS") || "21600000",
-      10
+      this.configService.get<string>("MATCH_SYNC_WEEKLY_INTERVAL_MS") ||
+        "21600000",
+      10,
     ); // 6 hours
     this.syncMonthlyIntervalMs = parseInt(
-      this.configService.get<string>("MATCH_SYNC_MONTHLY_INTERVAL_MS") || "43200000",
-      10
+      this.configService.get<string>("MATCH_SYNC_MONTHLY_INTERVAL_MS") ||
+        "43200000",
+      10,
     ); // 12 hours
 
     if (!this.syncEnabled) {
-      this.logger.warn("Match sync scheduler is disabled (MATCH_SYNC_ENABLED=false). All cron jobs are deactivated.");
+      this.logger.warn(
+        "Match sync scheduler is disabled (MATCH_SYNC_ENABLED=false). All cron jobs are deactivated.",
+      );
     } else {
-      if (!this.sync24hEnabled && !this.syncWeeklyEnabled && !this.syncMonthlyEnabled) {
-        this.logger.warn("Match sync is enabled but all individual sync jobs are disabled.");
+      if (
+        !this.sync24hEnabled &&
+        !this.syncWeeklyEnabled &&
+        !this.syncMonthlyEnabled
+      ) {
+        this.logger.warn(
+          "Match sync is enabled but all individual sync jobs are disabled.",
+        );
       }
     }
   }
@@ -72,13 +86,19 @@ export class MatchSyncScheduler implements OnModuleInit {
     } else {
       // Log which jobs are enabled
       if (this.sync24hEnabled) {
-        this.logger.log(`24-hour sync enabled with interval: ${this.sync24hIntervalMs}ms (${this.sync24hIntervalMs / 1000 / 60} minutes)`);
+        this.logger.log(
+          `24-hour sync enabled with interval: ${this.sync24hIntervalMs}ms (${this.sync24hIntervalMs / 1000 / 60} minutes)`,
+        );
       }
       if (this.syncWeeklyEnabled) {
-        this.logger.log(`Weekly sync enabled with interval: ${this.syncWeeklyIntervalMs}ms (${this.syncWeeklyIntervalMs / 1000 / 60} minutes)`);
+        this.logger.log(
+          `Weekly sync enabled with interval: ${this.syncWeeklyIntervalMs}ms (${this.syncWeeklyIntervalMs / 1000 / 60} minutes)`,
+        );
       }
       if (this.syncMonthlyEnabled) {
-        this.logger.log(`Monthly sync enabled with interval: ${this.syncMonthlyIntervalMs}ms (${this.syncMonthlyIntervalMs / 1000 / 60} minutes)`);
+        this.logger.log(
+          `Monthly sync enabled with interval: ${this.syncMonthlyIntervalMs}ms (${this.syncMonthlyIntervalMs / 1000 / 60} minutes)`,
+        );
       }
     }
   }
@@ -87,7 +107,11 @@ export class MatchSyncScheduler implements OnModuleInit {
     // This will be handled by the cron decorators being skipped when syncEnabled is false
     // But we can also check and disable them explicitly
     try {
-      const jobs = ["sync24HourMatches", "syncWeeklyMatches", "syncMonthlyMatches"];
+      const jobs = [
+        "sync24HourMatches",
+        "syncWeeklyMatches",
+        "syncMonthlyMatches",
+      ];
       for (const jobName of jobs) {
         const job = this.schedulerRegistry.getCronJob(jobName);
         if (job) {
@@ -119,13 +143,19 @@ export class MatchSyncScheduler implements OnModuleInit {
     const startTime = Date.now();
 
     try {
-      const totalSynced = await this.matchSyncService.syncMatchesForAllActiveLeagues(1);
+      const totalSynced =
+        await this.matchSyncService.syncMatchesForAllActiveLeagues(1);
 
       const duration = Date.now() - startTime;
-      this.logger.log(`Completed 24-hour match sync: ${totalSynced} matches synced in ${duration} ms`);
+      this.logger.log(
+        `Completed 24-hour match sync: ${totalSynced} matches synced in ${duration} ms`,
+      );
     } catch (error: any) {
       const duration = Date.now() - startTime;
-      this.logger.error(`Error during 24-hour match sync after ${duration} ms: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error during 24-hour match sync after ${duration} ms: ${error.message}`,
+        error.stack,
+      );
     }
   }
 
@@ -149,13 +179,19 @@ export class MatchSyncScheduler implements OnModuleInit {
     const startTime = Date.now();
 
     try {
-      const totalSynced = await this.matchSyncService.syncMatchesForAllActiveLeagues(7);
+      const totalSynced =
+        await this.matchSyncService.syncMatchesForAllActiveLeagues(7);
 
       const duration = Date.now() - startTime;
-      this.logger.log(`Completed weekly match sync: ${totalSynced} matches synced in ${duration} ms`);
+      this.logger.log(
+        `Completed weekly match sync: ${totalSynced} matches synced in ${duration} ms`,
+      );
     } catch (error: any) {
       const duration = Date.now() - startTime;
-      this.logger.error(`Error during weekly match sync after ${duration} ms: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error during weekly match sync after ${duration} ms: ${error.message}`,
+        error.stack,
+      );
     }
   }
 
@@ -178,13 +214,19 @@ export class MatchSyncScheduler implements OnModuleInit {
     const startTime = Date.now();
 
     try {
-      const totalSynced = await this.matchSyncService.syncMatchesForAllActiveLeagues(30);
+      const totalSynced =
+        await this.matchSyncService.syncMatchesForAllActiveLeagues(30);
 
       const duration = Date.now() - startTime;
-      this.logger.log(`Completed monthly match sync: ${totalSynced} matches synced in ${duration} ms`);
+      this.logger.log(
+        `Completed monthly match sync: ${totalSynced} matches synced in ${duration} ms`,
+      );
     } catch (error: any) {
       const duration = Date.now() - startTime;
-      this.logger.error(`Error during monthly match sync after ${duration} ms: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error during monthly match sync after ${duration} ms: ${error.message}`,
+        error.stack,
+      );
     }
   }
 }

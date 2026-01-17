@@ -5,54 +5,54 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
-} from 'typeorm';
-import { IsString, IsEnum, IsOptional } from 'class-validator';
-import { User } from './user.entity';
+} from "typeorm";
+import { IsString, IsEnum, IsOptional } from "class-validator";
+import { User } from "./user.entity";
 
 export enum AuditAction {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LOGIN = 'login',
-  LOGOUT = 'logout',
-  VIEW = 'view',
-  EXPORT = 'export',
-  IMPORT = 'import',
+  CREATE = "create",
+  UPDATE = "update",
+  DELETE = "delete",
+  LOGIN = "login",
+  LOGOUT = "logout",
+  VIEW = "view",
+  EXPORT = "export",
+  IMPORT = "import",
 }
 
 export enum AuditResource {
-  USER = 'user',
-  PRODUCT = 'product',
-  TRANSACTION = 'transaction',
-  SETTING = 'setting',
-  NOTIFICATION = 'notification',
-  SYSTEM = 'system',
+  USER = "user",
+  PRODUCT = "product",
+  TRANSACTION = "transaction",
+  SETTING = "setting",
+  NOTIFICATION = "notification",
+  SYSTEM = "system",
 }
 
-@Entity('audit_logs')
+@Entity("audit_logs")
 export class AuditLog {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'userId' })
+  @JoinColumn({ name: "userId" })
   user: User;
 
   @Column({ nullable: true })
   userId: string;
 
   @Column({
-    type: 'enum',
+    type: "enum",
     enum: AuditAction,
-    enumName: 'audit_action',
+    enumName: "audit_action",
   })
   @IsEnum(AuditAction)
   action: AuditAction;
 
   @Column({
-    type: 'enum',
+    type: "enum",
     enum: AuditResource,
-    enumName: 'audit_resource',
+    enumName: "audit_resource",
   })
   @IsEnum(AuditResource)
   resource: AuditResource;
@@ -62,16 +62,16 @@ export class AuditLog {
   @IsString()
   resourceId: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   @IsOptional()
   @IsString()
   description: string;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   @IsOptional()
   oldValues: Record<string, any>;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   @IsOptional()
   newValues: Record<string, any>;
 
