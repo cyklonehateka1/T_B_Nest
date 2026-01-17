@@ -9,6 +9,7 @@ import {
   Request,
   UseGuards,
   Param,
+  BadRequestException,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -148,15 +149,12 @@ export class TipsController {
     @Query("page") page?: number,
     @Query("size") size?: number,
   ): Promise<ApiResponseClass<TipsPageResponseDto>> {
-    // Parse page and size with defaults
     const pageNum = page !== undefined ? Number(page) : 0;
     const pageSize = size !== undefined ? Number(size) : 20;
 
-    // Parse minPrice and maxPrice
     const minPriceNum = minPrice !== undefined ? Number(minPrice) : undefined;
     const maxPriceNum = maxPrice !== undefined ? Number(maxPrice) : undefined;
 
-    // Parse isFree boolean
     let isFreeBool: boolean | undefined = undefined;
     if (isFree !== undefined && isFree !== null) {
       if (typeof isFree === "string") {
@@ -180,6 +178,130 @@ export class TipsController {
     );
 
     return ApiResponseClass.success(response, "Tips retrieved successfully");
+  }
+
+  @Get("my-tips")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRoleType.TIPSTER)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Get all tips belonging to the current user",
+    description:
+      "Retrieve all tips (both published and unpublished) belonging to the authenticated tipster. Sorted by newest first. Supports pagination for infinite scroll.",
+  })
+  @ApiQuery({
+    name: "page",
+    required: false,
+    description: "Page number (0-based)",
+    example: 0,
+    type: Number,
+  })
+  @ApiQuery({
+    name: "size",
+    required: false,
+    description: "Page size (number of tips per page)",
+    example: 20,
+    type: Number,
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Tips retrieved successfully",
+    type: TipsPageResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Unauthorized - invalid or missing JWT token",
+  })
+  @ApiResponse({
+    status: 403,
+    description: "Forbidden - user is not a tipster",
+  })
+  async getMyTips(
+    @Query("page") page?: string,
+    @Query("size") size?: string,
+    @Request() req?: any,
+  ): Promise<ApiResponseClass<TipsPageResponseDto>> {
+    const userId = req?.user?.id;
+
+    if (!userId) {
+      throw new Error("User ID not found in request");
+    }
+
+    const pageNum = page ? parseInt(page, 10) : 0;
+    const pageSize = size ? parseInt(size, 10) : 20;
+
+    if (isNaN(pageNum) || pageNum < 0) {
+      throw new BadRequestException("Invalid page number");
+    }
+
+    if (isNaN(pageSize) || pageSize < 1 || pageSize > 100) {
+      throw new BadRequestException(
+        "Invalid page size. Must be between 1 and 100",
+      );
+    }
+
+    const response = await this.tipsService.getMyTips(
+      userId,
+      pageNum,
+      pageSize,
+    );
+
+    return ApiResponseClass.success(response, "Tips retrieved successfully");
+  }
+
+  @Get(":id")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Get tip details",
+    description:
+      "Get tip details with selections. Only accessible by the tip creator or users who have purchased the tip. Free tips (price = 0) are accessible to all authenticated users when published.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Tip details retrieved successfully",
+    type: TipEditingResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: "Forbidden - user does not have access to this tip",
+    schema: {
+      example: {
+        statusCode: 403,
+        message:
+          "You do not have access to this tip. Please purchase it to view details.",
+        success: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Not found - tip not found",
+    schema: {
+      example: {
+        statusCode: 404,
+        message: "Tip not found: 550e8400-e29b-41d4-a716-446655440000",
+        success: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Unauthorized - invalid or missing JWT token",
+  })
+  async getTipDetails(
+    @Param("id") tipId: string,
+    @Request() req: any,
+  ): Promise<ApiResponseClass<TipEditingResponseDto>> {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new Error("User ID not found in request");
+    }
+
+    const tip = await this.tipsService.getTipDetails(tipId, userId);
+
+    return ApiResponseClass.success(tip, "Tip details retrieved successfully");
   }
 
   @Post()
@@ -328,9 +450,9 @@ export class TipsController {
   @Roles(UserRoleType.TIPSTER)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: "Get tip details for editing",
+    summary: "Get tip details for editing or viewing",
     description:
-      "Get tip details for editing. Only accessible by the tip creator and only if the tip is not published. Returns tip with selections.",
+      "Get tip details with selections. Accessible by the tip creator. Unpublished tips can be edited, published tips can be viewed (read-only).",
   })
   @ApiResponse({
     status: 200,
@@ -338,24 +460,12 @@ export class TipsController {
     type: TipEditingResponseDto,
   })
   @ApiResponse({
-    status: 400,
-    description: "Bad request - tip is published",
-    schema: {
-      example: {
-        statusCode: 400,
-        message:
-          "Cannot edit tip: tip has already been published and is available for purchase",
-        success: false,
-      },
-    },
-  })
-  @ApiResponse({
     status: 403,
     description: "Forbidden - user is not the tip owner or not a tipster",
     schema: {
       example: {
         statusCode: 403,
-        message: "You can only edit your own tips",
+        message: "You can only view your own tips",
         success: false,
       },
     },

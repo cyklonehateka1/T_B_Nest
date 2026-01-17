@@ -10,12 +10,10 @@ import { MatchesService } from "./matches.service";
 import { MatchBasicResponseDto } from "./dto/match-basic-response.dto";
 import { MatchDetailedResponseDto } from "./dto/match-detailed-response.dto";
 import { ApiResponse as ApiResponseClass } from "../../common/dto/api-response.dto";
-
 @ApiTags("Matches")
 @Controller("matches")
 export class MatchesController {
   constructor(private readonly matchesService: MatchesService) {}
-
   @Get("upcoming")
   @ApiOperation({
     summary: "Get upcoming matches",
@@ -49,20 +47,20 @@ export class MatchesController {
               id: "683bdda2-b79f-44a0-a2d5-569e27c09583",
               externalId: "39",
               name: "Premier League",
-              logoUrl: "https://example.com/logo.png",
+              logoUrl: "https:
               country: "England",
             },
             homeTeam: {
               id: "550e8400-e29b-41d4-a716-446655440001",
               name: "Manchester United",
               shortName: "Man Utd",
-              logoUrl: "https://example.com/logo.png",
+              logoUrl: "https:
             },
             awayTeam: {
               id: "550e8400-e29b-41d4-a716-446655440002",
               name: "Liverpool",
               shortName: "Liverpool",
-              logoUrl: "https://example.com/logo.png",
+              logoUrl: "https:
             },
             matchDate: "2024-01-15T15:00:00Z",
             status: "scheduled",
@@ -88,11 +86,8 @@ export class MatchesController {
   ): Promise<
     ApiResponseClass<Array<MatchBasicResponseDto | MatchDetailedResponseDto>>
   > {
-    // Check if user is a tipster (defaults to false for unauthenticated users)
     const isTipster = this.isUserTipster(req);
-
     let matches: Array<MatchBasicResponseDto | MatchDetailedResponseDto>;
-
     if (leagueExternalId && leagueExternalId.trim() !== "") {
       matches = await this.matchesService.getUpcomingMatchesByLeagueExternalId(
         leagueExternalId,
@@ -104,24 +99,15 @@ export class MatchesController {
         isTipster,
       );
     }
-
     const message = isTipster
       ? "Upcoming matches with odds retrieved successfully"
       : "Upcoming matches retrieved successfully";
-
     return ApiResponseClass.success(matches, message);
   }
-
-  /**
-   * Check if the authenticated user is a tipster
-   * Returns false for unauthenticated users (they get basic match info)
-   */
   private isUserTipster(req: any): boolean {
     if (!req || !req.user || !req.user.roles) {
       return false;
     }
-
-    // Check if user has TIPSTER role
     return req.user.roles.includes("TIPSTER") || req.user.role === "TIPSTER";
   }
 }

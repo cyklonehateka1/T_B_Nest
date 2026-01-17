@@ -11,7 +11,6 @@ import { UserRole } from "../../common/entities/user-role.entity";
 import { DeletedUser } from "../../common/entities/deleted-user.entity";
 import { InvalidatedToken } from "../../common/entities/invalidated-token.entity";
 import { EmailModule } from "../email/email.module";
-
 @Module({
   imports: [
     PassportModule,

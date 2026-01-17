@@ -8,7 +8,6 @@ import { MatchData } from "../../common/entities/match-data.entity";
 import { Team } from "../../common/entities/team.entity";
 import { League } from "../../common/entities/league.entity";
 import { Provider } from "../../common/entities/provider.entity";
-
 @Module({
   imports: [
     TypeOrmModule.forFeature([MatchData, Team, League, Provider]),

@@ -13,10 +13,6 @@ import {
 } from "class-validator";
 import { Type } from "class-transformer";
 import { CreateTipSelectionDto } from "./create-tip-selection.dto";
-
-/**
- * DTO for creating a tip
- */
 export class CreateTipDto {
   @ApiProperty({
     description: "Title of the tip",
@@ -27,7 +23,6 @@ export class CreateTipDto {
   @IsNotEmpty({ message: "Title is required" })
   @MaxLength(255, { message: "Title must not exceed 255 characters" })
   title: string;
-
   @ApiProperty({
     description: "Description of the tip (optional)",
     example: "Top picks for this weekend's Premier League matches",
@@ -36,7 +31,6 @@ export class CreateTipDto {
   @IsString({ message: "Description must be a string" })
   @IsOptional()
   description?: string;
-
   @ApiProperty({
     description: "Price of the tip (0 for free, 1-100 USD for paid tips)",
     example: 10.5,
@@ -48,7 +42,6 @@ export class CreateTipDto {
   @Min(0, { message: "Price must be at least 0" })
   @Max(100, { message: "Price must not exceed 100 USD" })
   price: number;
-
   @ApiProperty({
     description:
       "Array of match selections/predictions for this tip (optional for draft tips)",

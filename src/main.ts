@@ -8,36 +8,32 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { RateLimitingService } from "./common/services/rate-limiting.service";
 import { EnvironmentValidationService } from "./common/services/environment-validation.service";
-
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-
-  // Security middleware
   const allowedOrigins =
     process.env.NODE_ENV === "production"
       ? [
-          "https://admin.tipster.com",
-          "https://tipster.com",
-          "https://www.tipster.com",
-          "https://app.tipster.com",
-          "https://admin-api.tipster.com",
-          "http://localhost:5173",
-          "http://localhost:5174",
-          "http://localhost:5175",
+          "https:
+          "https:
+          "https:
+          "https:
+          "https:
+          "http:
+          "http:
+          "http:
           process.env.FRONTEND_URL,
         ].filter(Boolean)
       : [
-          "https://admin.tipster.com",
-          "https://tipster.com",
-          "https://www.tipster.com",
-          "https://app.tipster.com",
-          "https://admin-api.tipster.com",
-          "http://localhost:5173",
-          "http://localhost:5174",
-          "http://localhost:5175",
+          "https:
+          "https:
+          "https:
+          "https:
+          "https:
+          "http:
+          "http:
+          "http:
           process.env.FRONTEND_URL,
         ].filter(Boolean);
-
   app.enableCors({
     origin: allowedOrigins,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -56,21 +52,14 @@ async function bootstrap() {
     optionsSuccessStatus: 204,
   });
   app.use(helmet());
-
-  // Get services
   const rateLimitingService = app.get(RateLimitingService);
   const envValidationService = app.get(EnvironmentValidationService);
-
-  // Validate production environment
   envValidationService.validateProductionEnvironment();
   envValidationService.validateDatabaseConfiguration();
-
-  // Global burst protection - Short-term spike protection
-  // Endpoint-specific limits (below) handle longer-term restrictions
   app.use(
     rateLimit({
-      windowMs: 1 * 60 * 1000, // 1 minute
-      max: 100, // 100 requests per minute
+      windowMs: 1 * 60 * 1000,
+      max: 100,
       standardHeaders: true,
       legacyHeaders: false,
       message: {
@@ -83,8 +72,6 @@ async function bootstrap() {
       },
     }),
   );
-
-  // Endpoint-specific rate limiting
   app.use("/auth", rateLimitingService.getAuthRateLimit());
   app.use("/orders", rateLimitingService.getOrderRateLimit());
   app.use("/payments", rateLimitingService.getPaymentRateLimit());
@@ -92,8 +79,6 @@ async function bootstrap() {
   app.use("/resources", rateLimitingService.getResourceRateLimit());
   app.use("/email", rateLimitingService.getEmailRateLimit());
   app.use("/cart", rateLimitingService.getCartRateLimit());
-
-  // Validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -101,17 +86,9 @@ async function bootstrap() {
       transform: true,
     }),
   );
-
-  // Global interceptors
   app.useGlobalInterceptors(new TransformInterceptor());
-
-  // Global exception filter for consistent error responses
   app.useGlobalFilters(new HttpExceptionFilter());
-
-  // Set global prefix to match Java backend
   app.setGlobalPrefix("api");
-
-  // Swagger documentation - only enable in development/localhost
   if (process.env.NODE_ENV !== "production") {
     const config = new DocumentBuilder()
       .setTitle("Tipster Betting API")
@@ -122,8 +99,6 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup("api", app, document);
   }
-
   await app.listen(process.env.PORT ?? 3002);
 }
-
 void bootstrap();

@@ -12,7 +12,6 @@ import {
 import { Tip } from "./tip.entity";
 import { MatchData } from "./match-data.entity";
 import { PredictionType } from "../enums/prediction-type.enum";
-
 @Entity("tip_selections")
 @Index("idx_tip_selections_tip_id", ["tip"])
 @Index("idx_tip_selections_match_id", ["match"])
@@ -26,21 +25,18 @@ import { PredictionType } from "../enums/prediction-type.enum";
 export class TipSelection {
   @PrimaryGeneratedColumn("uuid")
   id: string;
-
   @ManyToOne(() => Tip, { nullable: false })
   @JoinColumn({
     name: "tip_id",
     foreignKeyConstraintName: "fk_tip_selections_tip",
   })
   tip: Tip;
-
   @ManyToOne(() => MatchData, { nullable: false })
   @JoinColumn({
     name: "match_id",
     foreignKeyConstraintName: "fk_tip_selections_match",
   })
   match: MatchData;
-
   @Column({
     name: "prediction_type",
     type: "enum",
@@ -49,7 +45,6 @@ export class TipSelection {
     nullable: false,
   })
   predictionType: PredictionType;
-
   @Column({
     name: "prediction_value",
     type: "varchar",
@@ -57,19 +52,14 @@ export class TipSelection {
     nullable: false,
   })
   predictionValue: string;
-
   @Column({ type: "decimal", precision: 8, scale: 2, nullable: true })
   odds?: number;
-
   @Column({ name: "is_correct", type: "boolean", nullable: true })
   isCorrect?: boolean;
-
   @Column({ name: "is_void", type: "boolean", nullable: false, default: false })
   isVoid: boolean;
-
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
-
   @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt: Date;
 }

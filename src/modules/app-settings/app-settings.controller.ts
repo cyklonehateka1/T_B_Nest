@@ -3,12 +3,10 @@ import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
 import { AppSettingsService } from "./app-settings.service";
 import { AppSettingsCustomerResponseDto } from "./dto/app-settings-customer-response.dto";
 import { ApiResponse as ApiResponseClass } from "../../common/dto/api-response.dto";
-
 @ApiTags("App Settings")
 @Controller("app-settings")
 export class AppSettingsController {
   constructor(private readonly appSettingsService: AppSettingsService) {}
-
   @Get("customer")
   @ApiOperation({
     summary: "Get app settings for customer app",
@@ -40,10 +38,9 @@ export class AppSettingsController {
     ApiResponseClass<AppSettingsCustomerResponseDto>
   > {
     const settings = await this.appSettingsService.getCustomerAppSettings();
-
     return ApiResponseClass.success(
       settings,
-      "App settings retrieved successfully"
+      "App settings retrieved successfully",
     );
   }
 }

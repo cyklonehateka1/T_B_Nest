@@ -9,7 +9,6 @@ import {
 import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
 import { ApiResponse as ApiResponseDto } from "../../common/dto/api-response.dto";
 import { HealthCheckResponse } from "../../common/types/api-response.types";
-
 @ApiTags("Health")
 @Controller("health")
 export class HealthController {
@@ -18,7 +17,6 @@ export class HealthController {
     private db: TypeOrmHealthIndicator,
     private memory: MemoryHealthIndicator,
   ) {}
-
   @Get()
   @HealthCheck()
   @ApiOperation({ summary: "Check application health" })
@@ -68,22 +66,14 @@ export class HealthController {
   })
   async check(): Promise<ApiResponseDto<HealthCheckResponse>> {
     const healthResult = await this.health.check([
-      // Database health check with longer timeout
       () => this.db.pingCheck("database", { timeout: 5000 }),
-
-      // Memory health check (warn if heap usage > 500MB for development)
       () => this.memory.checkHeap("memory_heap", 500 * 1024 * 1024),
-
-      // RSS memory check (warn if RSS > 200MB for development)
       () => this.memory.checkRSS("memory_rss", 200 * 1024 * 1024),
     ]);
-
     const isHealthy = healthResult.status === "ok";
     const message = isHealthy
       ? "Health check completed successfully"
       : "Health check failed";
-
-    // Transform to our expected format
     const healthResponse: HealthCheckResponse = {
       status: healthResult.status,
       timestamp: new Date().toISOString(),
@@ -92,7 +82,7 @@ export class HealthController {
       version: process.env.npm_package_version || "1.0.0",
       database: {
         status: healthResult.details?.database?.status || "unknown",
-        responseTime: 0, // Could be calculated from actual DB ping
+        responseTime: 0,
       },
       memory: {
         used: process.memoryUsage().heapUsed,
@@ -102,10 +92,8 @@ export class HealthController {
           100,
       },
     };
-
     return ApiResponseDto.success(healthResponse, message);
   }
-
   @Get("ping")
   @ApiOperation({ summary: "Simple ping endpoint" })
   @ApiResponse({
@@ -133,7 +121,6 @@ export class HealthController {
       environment: process.env.NODE_ENV || "development",
       version: process.env.npm_package_version || "1.0.0",
     };
-
     return ApiResponseDto.success(pingData, "Ping successful");
   }
 }

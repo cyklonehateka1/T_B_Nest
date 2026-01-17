@@ -9,19 +9,11 @@ import {
   JoinColumn,
 } from "typeorm";
 import { User } from "./user.entity";
-
-/**
- * Entity for application-wide settings that can be configured by admins
- * Contains commonly used settings with specific columns for type safety and performance
- * Additional flexible settings can be stored in the metadata JSONB column
- */
 @Entity("app_settings")
 @Index("idx_app_settings_is_active", ["isActive"])
 export class AppSettings {
   @PrimaryGeneratedColumn("uuid")
   id: string;
-
-  // Tip Pricing Settings
   @Column({
     name: "tip_min_price",
     type: "decimal",
@@ -31,7 +23,6 @@ export class AppSettings {
     default: 1.0,
   })
   tipMinPrice: number;
-
   @Column({
     name: "tip_max_price",
     type: "decimal",
@@ -41,8 +32,6 @@ export class AppSettings {
     default: 100.0,
   })
   tipMaxPrice: number;
-
-  // Platform Fees & Commission
   @Column({
     name: "platform_commission_rate",
     type: "decimal",
@@ -53,7 +42,6 @@ export class AppSettings {
     comment: "Platform commission rate (e.g., 0.1 = 10%)",
   })
   platformCommissionRate: number;
-
   @Column({
     name: "tipster_commission_rate",
     type: "decimal",
@@ -64,8 +52,6 @@ export class AppSettings {
     comment: "Tipster commission rate (e.g., 0.9 = 90%)",
   })
   tipsterCommissionRate: number;
-
-  // Limits
   @Column({
     name: "max_selections_per_tip",
     type: "integer",
@@ -74,7 +60,6 @@ export class AppSettings {
     comment: "Maximum number of selections allowed per tip",
   })
   maxSelectionsPerTip: number;
-
   @Column({
     name: "max_tips_per_day",
     type: "integer",
@@ -83,7 +68,6 @@ export class AppSettings {
       "Maximum number of tips a tipster can create per day (null = unlimited)",
   })
   maxTipsPerDay?: number;
-
   @Column({
     name: "max_tips_per_user",
     type: "integer",
@@ -92,7 +76,6 @@ export class AppSettings {
       "Maximum number of tips a user can purchase per day (null = unlimited)",
   })
   maxTipsPerUser?: number;
-
   @Column({
     name: "withdrawal_processing_days",
     type: "integer",
@@ -101,8 +84,6 @@ export class AppSettings {
     comment: "Number of business days to process withdrawal",
   })
   withdrawalProcessingDays: number;
-
-  // Feature Flags
   @Column({
     name: "enable_tip_purchases",
     type: "boolean",
@@ -111,7 +92,6 @@ export class AppSettings {
     comment: "Enable/disable tip purchases globally",
   })
   enableTipPurchases: boolean;
-
   @Column({
     name: "enable_new_tipster_registrations",
     type: "boolean",
@@ -120,7 +100,6 @@ export class AppSettings {
     comment: "Enable/disable new tipster account registrations",
   })
   enableNewTipsterRegistrations: boolean;
-
   @Column({
     name: "enable_free_tips",
     type: "boolean",
@@ -129,8 +108,6 @@ export class AppSettings {
     comment: "Allow tipsters to create free tips (price = 0)",
   })
   enableFreeTips: boolean;
-
-  // Content Moderation
   @Column({
     name: "require_tip_approval",
     type: "boolean",
@@ -139,7 +116,6 @@ export class AppSettings {
     comment: "Require admin approval before tips are published",
   })
   requireTipApproval: boolean;
-
   @Column({
     name: "auto_publish_tips",
     type: "boolean",
@@ -149,8 +125,6 @@ export class AppSettings {
       "Automatically publish tips when created (if not requiring approval)",
   })
   autoPublishTips: boolean;
-
-  // Notification Settings
   @Column({
     name: "send_email_notifications",
     type: "boolean",
@@ -159,7 +133,6 @@ export class AppSettings {
     comment: "Send email notifications for important events",
   })
   sendEmailNotifications: boolean;
-
   @Column({
     name: "send_tip_purchase_notifications",
     type: "boolean",
@@ -168,8 +141,6 @@ export class AppSettings {
     comment: "Send notifications when tips are purchased",
   })
   sendTipPurchaseNotifications: boolean;
-
-  // Maintenance Mode
   @Column({
     name: "maintenance_mode",
     type: "boolean",
@@ -178,7 +149,6 @@ export class AppSettings {
     comment: "Enable maintenance mode (blocks non-admin access)",
   })
   maintenanceMode: boolean;
-
   @Column({
     name: "maintenance_message",
     type: "text",
@@ -186,8 +156,6 @@ export class AppSettings {
     comment: "Message to display during maintenance mode",
   })
   maintenanceMessage?: string;
-
-  // Analytics & Tracking
   @Column({
     name: "enable_analytics",
     type: "boolean",
@@ -196,16 +164,12 @@ export class AppSettings {
     comment: "Enable analytics tracking",
   })
   enableAnalytics: boolean;
-
-  // Additional flexible settings stored as JSONB
   @Column({
     type: "jsonb",
     nullable: true,
     comment: "Additional flexible settings stored as key-value pairs",
   })
   metadata?: Record<string, any>;
-
-  // Status
   @Column({
     name: "is_active",
     type: "boolean",
@@ -214,18 +178,14 @@ export class AppSettings {
     comment: "Whether these settings are currently active",
   })
   isActive: boolean;
-
-  // Audit fields
   @ManyToOne(() => User, { nullable: true })
   @JoinColumn({
     name: "updated_by",
     foreignKeyConstraintName: "fk_app_settings_updated_by",
   })
   updatedBy?: User;
-
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
-
   @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt: Date;
 }

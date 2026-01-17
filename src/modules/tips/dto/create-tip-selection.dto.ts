@@ -7,10 +7,6 @@ import {
   IsNotEmpty,
   IsOptional,
 } from "class-validator";
-
-/**
- * DTO for creating a tip selection (match prediction within a tip)
- */
 export class CreateTipSelectionDto {
   @ApiProperty({
     description: "UUID of the match",
@@ -19,7 +15,6 @@ export class CreateTipSelectionDto {
   @IsUUID("4", { message: "Match ID must be a valid UUID" })
   @IsNotEmpty({ message: "Match ID is required" })
   matchId: string;
-
   @ApiProperty({
     description: "Prediction value (e.g., 'home_win', 'over_2.5', 'btts_yes')",
     example: "home_win",
@@ -27,7 +22,6 @@ export class CreateTipSelectionDto {
   @IsString({ message: "Prediction must be a string" })
   @IsNotEmpty({ message: "Prediction is required" })
   prediction: string;
-
   @ApiProperty({
     description: "Odds for this prediction (optional, can be null)",
     example: 2.5,

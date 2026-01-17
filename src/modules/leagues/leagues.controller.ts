@@ -3,12 +3,10 @@ import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from "@nestjs/swagger";
 import { LeaguesService } from "./leagues.service";
 import { LeagueResponseDto } from "./dto/league-response.dto";
 import { ApiResponse as ApiResponseClass } from "../../common/dto/api-response.dto";
-
 @ApiTags("Leagues")
 @Controller("leagues")
 export class LeaguesController {
   constructor(private readonly leaguesService: LeaguesService) {}
-
   @Get("football")
   @ApiOperation({
     summary: "Get football leagues",
@@ -29,7 +27,7 @@ export class LeaguesController {
             name: "Premier League",
             description: null,
             country: "England",
-            logoUrl: "https://example.com/logo.png",
+            logoUrl: "https:
             isActive: true,
             sportKey: "soccer_uk",
             sportGroup: "Soccer",
@@ -46,7 +44,6 @@ export class LeaguesController {
       "Football leagues retrieved successfully",
     );
   }
-
   @Get()
   @ApiOperation({
     summary: "Get leagues by sport group",
@@ -73,7 +70,7 @@ export class LeaguesController {
             name: "Premier League",
             description: null,
             country: "England",
-            logoUrl: "https://example.com/logo.png",
+            logoUrl: "https:
             isActive: true,
             sportKey: "soccer_uk",
             sportGroup: "Soccer",
@@ -87,14 +84,11 @@ export class LeaguesController {
     @Query("sportGroup") sportGroup?: string,
   ): Promise<ApiResponseClass<LeagueResponseDto[]>> {
     let leagues: LeagueResponseDto[];
-
     if (sportGroup && sportGroup.trim() !== "") {
       leagues = await this.leaguesService.getLeaguesBySportGroup(sportGroup);
     } else {
-      // Default to football if no sport group specified
       leagues = await this.leaguesService.getFootballLeagues();
     }
-
     return ApiResponseClass.success(leagues, "Leagues retrieved successfully");
   }
 }

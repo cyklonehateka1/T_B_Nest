@@ -1,6 +1,5 @@
 import { Injectable } from "@nestjs/common";
 import * as Handlebars from "handlebars";
-
 export interface InviteTemplateData {
   email: string;
   role: string;
@@ -9,14 +8,12 @@ export interface InviteTemplateData {
   expiryHours: number;
   supportEmail: string;
 }
-
 export interface PasswordResetTemplateData {
   email: string;
   resetUrl: string;
   expiryHours: number;
   supportEmail: string;
 }
-
 export interface OtpTemplateData {
   email: string;
   otp: string;
@@ -24,13 +21,11 @@ export interface OtpTemplateData {
   expiryMinutes: number;
   supportEmail: string;
 }
-
 @Injectable()
 export class EmailTemplateService {
   private readonly inviteTemplate: HandlebarsTemplateDelegate<InviteTemplateData>;
   private readonly passwordResetTemplate: HandlebarsTemplateDelegate<PasswordResetTemplateData>;
   private readonly otpTemplate: HandlebarsTemplateDelegate<OtpTemplateData>;
-
   constructor() {
     this.inviteTemplate = Handlebars.compile(this.getInviteTemplate());
     this.passwordResetTemplate = Handlebars.compile(
@@ -38,22 +33,17 @@ export class EmailTemplateService {
     );
     this.otpTemplate = Handlebars.compile(this.getOtpTemplate());
   }
-
   async renderInviteTemplate(data: InviteTemplateData): Promise<string> {
     return this.inviteTemplate(data);
   }
-
   async renderPasswordResetTemplate(
     data: PasswordResetTemplateData,
   ): Promise<string> {
     return this.passwordResetTemplate(data);
   }
-
   async renderOtpTemplate(data: OtpTemplateData): Promise<string> {
     return this.otpTemplate(data);
   }
-
-  // Payment success email template
   generatePaymentSuccessEmail(data: {
     orderNumber: string;
     amount: number;
@@ -137,12 +127,9 @@ export class EmailTemplateService {
             <h1>Payment Successful!</h1>
             <p>Your order has been paid for successfully</p>
         </div>
-        
         <div class="content">
             <p>Dear ${data.customerName},</p>
-            
             <p>Great news! Your payment has been processed successfully. Here are your order details:</p>
-            
             <div class="order-details">
                 <div class="detail-row">
                     <span><strong>Order Number:</strong></span>
@@ -161,12 +148,9 @@ export class EmailTemplateService {
                     <span style="color: #10b981; font-weight: 600;">Paid</span>
                 </div>
             </div>
-            
             <p>Our team will process your order and send you the gift card codes shortly. You'll receive another email with your gift card details.</p>
-            
             <p>Thank you for choosing our service!</p>
         </div>
-        
         <div class="footer">
             <p>This is an automated message from GiftBanc</p>
             <p>If you have any questions, please contact our support team</p>
@@ -176,8 +160,6 @@ export class EmailTemplateService {
 </html>
     `;
   }
-
-  // Payment failure email template
   generatePaymentFailureEmail(data: {
     orderNumber: string;
     amount: number;
@@ -272,12 +254,9 @@ export class EmailTemplateService {
             <h1>Payment Failed</h1>
             <p>We couldn't process your payment</p>
         </div>
-        
         <div class="content">
             <p>Dear ${data.customerName},</p>
-            
             <p>Unfortunately, your payment for order ${data.orderNumber} could not be processed. Here are the details:</p>
-            
             <div class="order-details">
                 <div class="detail-row">
                     <span><strong>Order Number:</strong></span>
@@ -302,12 +281,9 @@ export class EmailTemplateService {
                     : ""
                 }
             </div>
-            
             <p>You can try again by visiting your order page and attempting the payment again. If the problem persists, please contact our support team.</p>
-            
             <a href="#" class="cta-button">Try Payment Again</a>
         </div>
-        
         <div class="footer">
             <p>This is an automated message from Gift Card Shop</p>
             <p>If you have any questions, please contact our support team</p>
@@ -317,8 +293,6 @@ export class EmailTemplateService {
 </html>
     `;
   }
-
-  // Admin notification for paid orders
   generateOrderPaidNotification(data: {
     orderNumber: string;
     amount: number;
@@ -413,10 +387,8 @@ export class EmailTemplateService {
             <h1>New Paid Order</h1>
             <p>Order ${data.orderNumber} has been paid for</p>
         </div>
-        
         <div class="content">
             <p>A new order has been paid for and is ready for fulfillment:</p>
-            
             <div class="order-details">
                 <div class="detail-row">
                     <span><strong>Order Number:</strong></span>
@@ -439,12 +411,9 @@ export class EmailTemplateService {
                     <span style="color: #10b981; font-weight: 600;">Paid</span>
                 </div>
             </div>
-            
             <p>Please process this order and send the gift card codes to the customer.</p>
-            
             <a href="#" class="cta-button">View Order Details</a>
         </div>
-        
         <div class="footer">
             <p>This is an automated notification from Gift Card Shop</p>
         </div>
@@ -453,8 +422,6 @@ export class EmailTemplateService {
 </html>
     `;
   }
-
-  // Payment monitoring success email template
   generatePaymentMonitoringSuccessEmail(data: {
     orderNumber: string;
     amount: number;
@@ -548,12 +515,9 @@ export class EmailTemplateService {
             <h1>Payment Successfully Processed!</h1>
             <p>Your payment has been confirmed and processed</p>
         </div>
-        
         <div class="content">
             <p>Dear ${data.customerName},</p>
-            
             <p>Great news! Your payment has been successfully processed and confirmed by our payment monitoring system. Here are the details:</p>
-            
             <div class="order-details">
                 <div class="detail-row">
                     <span><strong>Order Number:</strong></span>
@@ -576,17 +540,14 @@ export class EmailTemplateService {
                     <span style="color: #10b981; font-weight: 600;">Confirmed & Processed</span>
                 </div>
             </div>
-            
             <div class="processing-info">
                 <h3 style="margin-top: 0; color: #1e40af;">🔄 Processing Information</h3>
                 <p><strong>Payment Verification:</strong> Our automated system has successfully verified your payment with the payment provider.</p>
                 ${data.processingTime ? `<p><strong>Processing Time:</strong> ${data.processingTime}</p>` : ""}
                 <p><strong>Next Steps:</strong> Your order is now being prepared for fulfillment. You'll receive your gift card codes shortly.</p>
             </div>
-            
             <p>Thank you for your patience and for choosing our service!</p>
         </div>
-        
         <div class="footer">
             <p>This is an automated confirmation from Gift Card Shop</p>
             <p>If you have any questions, please contact our support team</p>
@@ -596,8 +557,6 @@ export class EmailTemplateService {
 </html>
     `;
   }
-
-  // Payment monitoring failure email template
   generatePaymentMonitoringFailureEmail(data: {
     orderNumber: string;
     amount: number;
@@ -694,12 +653,9 @@ export class EmailTemplateService {
             <h1>Payment Failed</h1>
             <p>We couldn't process your payment</p>
         </div>
-        
         <div class="content">
             <p>Dear ${data.customerName},</p>
-            
             <p>Unfortunately, your payment for order ${data.orderNumber} could not be processed. Here are the details:</p>
-            
             <div class="order-details">
                 <div class="detail-row">
                     <span><strong>Order Number:</strong></span>
@@ -722,7 +678,6 @@ export class EmailTemplateService {
                     <span style="color: #ef4444; font-weight: 600;">Processing Failed</span>
                 </div>
             </div>
-            
             ${
               data.errorMessage
                 ? `
@@ -734,12 +689,9 @@ export class EmailTemplateService {
             `
                 : ""
             }
-            
             <p>You can try again by visiting your order page and attempting the payment again. If the problem persists, please contact our support team.</p>
-            
             ${data.retryUrl ? `<a href="${data.retryUrl}" class="cta-button">Try Payment Again</a>` : ""}
         </div>
-        
         <div class="footer">
             <p>This is an automated message from Gift Card Shop</p>
             <p>If you have any questions, please contact our support team</p>
@@ -749,7 +701,6 @@ export class EmailTemplateService {
 </html>
     `;
   }
-
   generatePasswordChangeNotification(): string {
     return `
 <!DOCTYPE html>
@@ -852,17 +803,13 @@ export class EmailTemplateService {
         <div class="header">
             <h1>🔒 Password Changed Successfully</h1>
         </div>
-        
         <div class="content">
             <p>Hello,</p>
-            
             <p>Your password has been successfully changed. This is a security notification to confirm that the password change was completed.</p>
-            
             <div class="alert-box">
                 <h3>⚠️ Security Alert</h3>
                 <p>If you did not initiate this password change, please contact our support team immediately and consider changing your password again.</p>
             </div>
-            
             <div class="info-box">
                 <h3>🔐 Security Tips</h3>
                 <ul>
@@ -873,12 +820,9 @@ export class EmailTemplateService {
                     <li>Log out from devices you don't recognize</li>
                 </ul>
             </div>
-            
             <p>If you have any questions or concerns, please don't hesitate to contact our support team.</p>
-            
             <p>Best regards,<br>The Gift Card Shop Team</p>
         </div>
-        
         <div class="footer">
             <p>This is an automated security notification. Please do not reply to this email.</p>
             <p>If you need assistance, contact our support team.</p>
@@ -887,7 +831,6 @@ export class EmailTemplateService {
 </body>
 </html>`;
   }
-
   generateAccountDeletionNotification(): string {
     return `
 <!DOCTYPE html>
@@ -977,17 +920,13 @@ export class EmailTemplateService {
         <div class="header">
             <h1>🗑️ Account Deleted Successfully</h1>
         </div>
-        
         <div class="content">
             <p>Hello,</p>
-            
             <p>Your account has been successfully deleted as requested. This is a confirmation email to notify you that the account deletion process has been completed.</p>
-            
             <div class="alert-box">
                 <h3>⚠️ Important Notice</h3>
                 <p>This action is irreversible. Your account and all associated data have been permanently removed from our system.</p>
             </div>
-            
             <div class="info-box">
                 <h3>📋 What Happens Next</h3>
                 <ul>
@@ -998,14 +937,10 @@ export class EmailTemplateService {
                     <li>You can create a new account anytime if needed</li>
                 </ul>
             </div>
-            
             <p>If you did not request this account deletion or have any questions, please contact our support team immediately.</p>
-            
             <p>Thank you for using our service.</p>
-            
             <p>Best regards,<br>The Gift Card Shop Team</p>
         </div>
-        
         <div class="footer">
             <p>This is an automated notification. Please do not reply to this email.</p>
             <p>If you need assistance, contact our support team.</p>
@@ -1014,7 +949,6 @@ export class EmailTemplateService {
 </body>
 </html>`;
   }
-
   generateGiftDeliveryEmail(data: {
     recipientEmail: string;
     senderName: string;
@@ -1126,12 +1060,9 @@ export class EmailTemplateService {
             <h1>You've Received a Gift Card!</h1>
             <p>Someone special has sent you a gift</p>
         </div>
-        
         <div class="content">
             <p>Hello!</p>
-            
             <p>You've received a gift card from <strong>${data.senderName}</strong>!</p>
-            
             <div class="gift-details">
                 <div class="detail-row">
                     <span><strong>Gift Card:</strong></span>
@@ -1146,7 +1077,6 @@ export class EmailTemplateService {
                     <span style="color: #10b981; font-weight: 600;">Delivered</span>
                 </div>
             </div>
-            
             ${
               data.personalMessage
                 ? `
@@ -1157,7 +1087,6 @@ export class EmailTemplateService {
             `
                 : ""
             }
-            
             <h3>Your Gift Card Codes:</h3>
             <div class="gift-codes">
                 ${data.giftCardCodes
@@ -1168,7 +1097,6 @@ export class EmailTemplateService {
                   )
                   .join("")}
             </div>
-            
             <p><strong>How to use your gift card:</strong></p>
             <ul>
                 <li>Copy the gift card code(s) above</li>
@@ -1176,10 +1104,8 @@ export class EmailTemplateService {
                 <li>Enter the code during checkout</li>
                 <li>Enjoy your gift!</li>
             </ul>
-            
             <p>Thank you for using our gift card service!</p>
         </div>
-        
         <div class="footer">
             <p>This gift was sent via our secure gift card delivery system.</p>
         </div>
@@ -1187,7 +1113,6 @@ export class EmailTemplateService {
 </body>
 </html>`;
   }
-
   private getInviteTemplate(): string {
     return `
 <!DOCTYPE html>
@@ -1202,14 +1127,12 @@ export class EmailTemplateService {
             padding: 0;
             box-sizing: border-box;
         }
-        
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             line-height: 1.6;
             color: #333;
             background-color: #f8fafc;
         }
-        
         .container {
             max-width: 600px;
             margin: 0 auto;
@@ -1218,35 +1141,29 @@ export class EmailTemplateService {
             overflow: hidden;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-        
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             padding: 40px 30px;
             text-align: center;
         }
-        
         .header h1 {
             color: #ffffff;
             font-size: 28px;
             font-weight: 700;
             margin-bottom: 10px;
         }
-        
         .header p {
             color: #e2e8f0;
             font-size: 16px;
         }
-        
         .content {
             padding: 40px 30px;
         }
-        
         .welcome-text {
             font-size: 18px;
             color: #374151;
             margin-bottom: 24px;
         }
-        
         .invite-details {
             background-color: #f8fafc;
             border-radius: 8px;
@@ -1254,7 +1171,6 @@ export class EmailTemplateService {
             margin: 24px 0;
             border-left: 4px solid #667eea;
         }
-        
         .detail-row {
             display: flex;
             justify-content: space-between;
@@ -1262,23 +1178,19 @@ export class EmailTemplateService {
             padding-bottom: 12px;
             border-bottom: 1px solid #e5e7eb;
         }
-        
         .detail-row:last-child {
             border-bottom: none;
             margin-bottom: 0;
             padding-bottom: 0;
         }
-        
         .detail-label {
             font-weight: 600;
             color: #6b7280;
         }
-        
         .detail-value {
             color: #374151;
             font-weight: 500;
         }
-        
         .cta-button {
             display: inline-block;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -1292,12 +1204,10 @@ export class EmailTemplateService {
             text-align: center;
             transition: all 0.3s ease;
         }
-        
         .cta-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
         }
-        
         .expiry-notice {
             background-color: #fef3c7;
             border: 1px solid #f59e0b;
@@ -1306,35 +1216,29 @@ export class EmailTemplateService {
             margin: 24px 0;
             color: #92400e;
         }
-        
         .footer {
             background-color: #f8fafc;
             padding: 24px 30px;
             text-align: center;
             border-top: 1px solid #e5e7eb;
         }
-        
         .footer p {
             color: #6b7280;
             font-size: 14px;
             margin-bottom: 8px;
         }
-        
         .footer a {
             color: #667eea;
             text-decoration: none;
         }
-        
         @media (max-width: 600px) {
             .container {
                 margin: 10px;
                 border-radius: 8px;
             }
-            
             .header, .content, .footer {
                 padding: 20px;
             }
-            
             .header h1 {
                 font-size: 24px;
             }
@@ -1347,12 +1251,10 @@ export class EmailTemplateService {
             <h1>🎉 You're Invited!</h1>
             <p>Join the Gift Card Admin Platform</p>
         </div>
-        
         <div class="content">
             <p class="welcome-text">
                 Hello! You've been invited to join our Gift Card Admin Platform as a team member.
             </p>
-            
             <div class="invite-details">
                 <div class="detail-row">
                     <span class="detail-label">Email:</span>
@@ -1367,32 +1269,27 @@ export class EmailTemplateService {
                     <span class="detail-value">{{invitedBy}}</span>
                 </div>
             </div>
-            
             <p style="margin: 24px 0; color: #374151;">
                 Click the button below to accept your invitation and set up your account:
             </p>
-            
             <a href="{{inviteUrl}}" class="cta-button">
                 Accept Invitation
             </a>
-            
             <div class="expiry-notice">
-                <strong>⏰ Important:</strong> This invitation will expire in {{expiryHours}} hours. 
+                <strong>⏰ Important:</strong> This invitation will expire in {{expiryHours}} hours.
                 Please accept it before then to avoid having to request a new invitation.
             </div>
-            
             <p style="margin: 24px 0; color: #6b7280; font-size: 14px;">
                 If the button doesn't work, you can copy and paste this link into your browser:
                 <br>
                 <a href="{{inviteUrl}}" style="color: #667eea; word-break: break-all;">{{inviteUrl}}</a>
             </p>
         </div>
-        
         <div class="footer">
             <p>This invitation was sent from the Gift Card Admin Platform</p>
             <p>If you didn't expect this invitation, please ignore this email</p>
             <p>
-                Need help? Contact us at 
+                Need help? Contact us at
                 <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>
             </p>
         </div>
@@ -1401,7 +1298,6 @@ export class EmailTemplateService {
 </html>
     `;
   }
-
   private getPasswordResetTemplate(): string {
     return `
 <!DOCTYPE html>
@@ -1416,14 +1312,12 @@ export class EmailTemplateService {
             padding: 0;
             box-sizing: border-box;
         }
-        
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             line-height: 1.6;
             color: #333;
             background-color: #f8fafc;
         }
-        
         .container {
             max-width: 600px;
             margin: 0 auto;
@@ -1432,35 +1326,29 @@ export class EmailTemplateService {
             overflow: hidden;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-        
         .header {
             background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
             padding: 40px 30px;
             text-align: center;
         }
-        
         .header h1 {
             color: #ffffff;
             font-size: 28px;
             font-weight: 700;
             margin-bottom: 10px;
         }
-        
         .header p {
             color: #fecaca;
             font-size: 16px;
         }
-        
         .content {
             padding: 40px 30px;
         }
-        
         .welcome-text {
             font-size: 18px;
             color: #374151;
             margin-bottom: 24px;
         }
-        
         .reset-info {
             background-color: #fef2f2;
             border-radius: 8px;
@@ -1468,17 +1356,14 @@ export class EmailTemplateService {
             margin: 24px 0;
             border-left: 4px solid #ef4444;
         }
-        
         .info-item {
             display: flex;
             align-items: center;
             margin-bottom: 12px;
         }
-        
         .info-item:last-child {
             margin-bottom: 0;
         }
-        
         .info-icon {
             width: 20px;
             height: 20px;
@@ -1492,12 +1377,10 @@ export class EmailTemplateService {
             font-size: 12px;
             font-weight: bold;
         }
-        
         .info-text {
             color: #374151;
             font-weight: 500;
         }
-        
         .cta-button {
             display: inline-block;
             background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
@@ -1511,12 +1394,10 @@ export class EmailTemplateService {
             text-align: center;
             transition: all 0.3s ease;
         }
-        
         .cta-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(239, 68, 68, 0.3);
         }
-        
         .expiry-notice {
             background-color: #fef3c7;
             border: 1px solid #f59e0b;
@@ -1525,7 +1406,6 @@ export class EmailTemplateService {
             margin: 24px 0;
             color: #92400e;
         }
-        
         .security-notice {
             background-color: #f0f9ff;
             border: 1px solid #0ea5e9;
@@ -1534,35 +1414,29 @@ export class EmailTemplateService {
             margin: 24px 0;
             color: #0c4a6e;
         }
-        
         .footer {
             background-color: #f8fafc;
             padding: 24px 30px;
             text-align: center;
             border-top: 1px solid #e5e7eb;
         }
-        
         .footer p {
             color: #6b7280;
             font-size: 14px;
             margin-bottom: 8px;
         }
-        
         .footer a {
             color: #ef4444;
             text-decoration: none;
         }
-        
         @media (max-width: 600px) {
             .container {
                 margin: 10px;
                 border-radius: 8px;
             }
-            
             .header, .content, .footer {
                 padding: 20px;
             }
-            
             .header h1 {
                 font-size: 24px;
             }
@@ -1575,12 +1449,10 @@ export class EmailTemplateService {
             <h1>🔐 Reset Your Password</h1>
             <p>Gift Card Admin Platform</p>
         </div>
-        
         <div class="content">
             <p class="welcome-text">
                 Hello! We received a request to reset your password for your Gift Card Admin Platform account.
             </p>
-            
             <div class="reset-info">
                 <div class="info-item">
                     <div class="info-icon">✓</div>
@@ -1595,37 +1467,31 @@ export class EmailTemplateService {
                     <span class="info-text">Secure reset link</span>
                 </div>
             </div>
-            
             <p style="margin: 24px 0; color: #374151;">
                 Click the button below to reset your password:
             </p>
-            
             <a href="{{resetUrl}}" class="cta-button">
                 Reset Password
             </a>
-            
             <div class="expiry-notice">
-                <strong>⏰ Important:</strong> This reset link will expire in {{expiryHours}} hour(s). 
+                <strong>⏰ Important:</strong> This reset link will expire in {{expiryHours}} hour(s).
                 Please reset your password before then.
             </div>
-            
             <div class="security-notice">
-                <strong>🔒 Security Notice:</strong> If you didn't request this password reset, 
+                <strong>🔒 Security Notice:</strong> If you didn't request this password reset,
                 please ignore this email. Your password will remain unchanged.
             </div>
-            
             <p style="margin: 24px 0; color: #6b7280; font-size: 14px;">
                 If the button doesn't work, you can copy and paste this link into your browser:
                 <br>
                 <a href="{{resetUrl}}" style="color: #ef4444; word-break: break-all;">{{resetUrl}}</a>
             </p>
         </div>
-        
         <div class="footer">
             <p>This password reset was requested from the Gift Card Admin Platform</p>
             <p>If you didn't request this reset, please ignore this email</p>
             <p>
-                Need help? Contact us at 
+                Need help? Contact us at
                 <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>
             </p>
         </div>
@@ -1634,7 +1500,6 @@ export class EmailTemplateService {
 </html>
     `;
   }
-
   private getOtpTemplate(): string {
     return `
 <!DOCTYPE html>
@@ -1712,7 +1577,7 @@ export class EmailTemplateService {
     <div class="container">
         <div class="logo">
             <!-- You can replace this with your actual logo -->
-            <img src="https://dummyimage.com/120x32/000/fff&text=Gift+Card+Shop" alt="Gift Card Shop" />
+            <img src="https:
         </div>
         <div class="title">Verify your email</div>
         <div class="subtitle">Enter the code below to complete your registration.</div>

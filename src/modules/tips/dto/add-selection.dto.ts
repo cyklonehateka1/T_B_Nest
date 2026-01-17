@@ -7,10 +7,6 @@ import {
   IsNotEmpty,
   IsOptional,
 } from "class-validator";
-
-/**
- * DTO for adding/updating a selection to a tip
- */
 export class AddSelectionDto {
   @ApiProperty({
     description: "UUID of the match",
@@ -19,7 +15,6 @@ export class AddSelectionDto {
   @IsUUID("4", { message: "Match ID must be a valid UUID" })
   @IsNotEmpty({ message: "Match ID is required" })
   matchId: string;
-
   @ApiProperty({
     description: "Prediction value (e.g., 'home_win', 'over_2.5', 'btts_yes')",
     example: "home_win",
@@ -27,7 +22,6 @@ export class AddSelectionDto {
   @IsString({ message: "Prediction must be a string" })
   @IsNotEmpty({ message: "Prediction is required" })
   prediction: string;
-
   @ApiProperty({
     description: "Odds for this prediction (optional, can be null)",
     example: 2.5,
@@ -37,7 +31,6 @@ export class AddSelectionDto {
   @IsNumber({}, { message: "Odds must be a number" })
   @IsOptional()
   odds?: number | null;
-
   @ApiProperty({
     description: "Bet line (for handicap selections)",
     example: -1.5,

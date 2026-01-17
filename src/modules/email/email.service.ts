@@ -2,7 +2,6 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import axios from "axios";
 import { EmailTemplateService } from "./email-template.service";
-
 export interface EmailOptions {
   to: string;
   subject: string;
@@ -11,7 +10,6 @@ export interface EmailOptions {
   from?: string;
   replyTo?: string;
 }
-
 export interface BrevoEmailPayload {
   sender: {
     name: string;
@@ -29,7 +27,6 @@ export interface BrevoEmailPayload {
     name?: string;
   };
 }
-
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -39,25 +36,20 @@ export class EmailService {
   private readonly emailFromName: string;
   private readonly frontendUrl: string;
   private readonly supportEmail: string;
-
   constructor(
     private readonly configService: ConfigService,
     private readonly templateService: EmailTemplateService,
   ) {
-    // Load Brevo API config from environment
     const apiKey = this.configService.get<string>("BREVO_SMTP_API_KEY");
     const baseUrl = this.configService.get<string>(
       "BREVO_SMTP_BASE_URL",
-      "https://api.brevo.com",
+      "https:
     );
-
     if (!apiKey) {
       throw new Error("BREVO_SMTP_API_KEY is required for Brevo API");
     }
-
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
-
     this.emailFrom = this.configService.get<string>(
       "EMAIL_FROM",
       "support@giftbanc.com",
@@ -68,14 +60,13 @@ export class EmailService {
     );
     this.frontendUrl = this.configService.get<string>(
       "FRONTEND_URL",
-      "https://giftbanc.com",
+      "https:
     );
     this.supportEmail = this.configService.get<string>(
       "SUPPORT_EMAIL",
       "support@giftbanc.com",
     );
   }
-
   async sendEmail(options: EmailOptions): Promise<void> {
     try {
       const payload: BrevoEmailPayload = {
@@ -86,21 +77,19 @@ export class EmailService {
         to: [
           {
             email: options.to,
-            name: options.to.split("@")[0], // Use email prefix as name if no name provided
+            name: options.to.split("@")[0],
           },
         ],
         subject: options.subject,
         htmlContent: options.html,
         textContent: options.text,
       };
-
       if (options.replyTo) {
         payload.replyTo = {
           email: options.replyTo,
           name: options.replyTo.split("@")[0],
         };
       }
-
       const response = await axios.post(
         `${this.baseUrl}/v3/smtp/email`,
         payload,
@@ -121,8 +110,6 @@ export class EmailService {
       throw error;
     }
   }
-
-  // Example: Send Invite Email
   async sendInviteEmail(
     email: string,
     token: string,
@@ -145,8 +132,6 @@ export class EmailService {
       from: this.emailFrom,
     });
   }
-
-  // Example: Send Password Reset Email
   async sendPasswordResetEmail(email: string, token: string): Promise<void> {
     const resetUrl = `${this.frontendUrl}/auth/reset-password?token=${token}`;
     const html = await this.templateService.renderPasswordResetTemplate({
@@ -162,8 +147,6 @@ export class EmailService {
       from: this.emailFrom,
     });
   }
-
-  // Example: Send OTP Email
   async sendOtpEmail(
     email: string,
     otp: string,
@@ -183,8 +166,6 @@ export class EmailService {
       from: this.emailFrom,
     });
   }
-
-  // Payment success email
   async sendPaymentSuccessEmail(
     email: string,
     data: {
@@ -198,8 +179,6 @@ export class EmailService {
     const html = this.templateService.generatePaymentSuccessEmail(data);
     await this.sendEmail({ to: email, subject, html });
   }
-
-  // Payment failure email
   async sendPaymentFailureEmail(
     email: string,
     data: {
@@ -213,8 +192,6 @@ export class EmailService {
     const html = this.templateService.generatePaymentFailureEmail(data);
     await this.sendEmail({ to: email, subject, html });
   }
-
-  // Admin notification for paid orders
   async sendOrderPaidNotification(
     email: string,
     data: {
@@ -228,8 +205,6 @@ export class EmailService {
     const html = this.templateService.generateOrderPaidNotification(data);
     await this.sendEmail({ to: email, subject, html });
   }
-
-  // Payment monitoring success notification
   async sendPaymentMonitoringSuccessEmail(
     email: string,
     data: {
@@ -246,8 +221,6 @@ export class EmailService {
       this.templateService.generatePaymentMonitoringSuccessEmail(data);
     await this.sendEmail({ to: email, subject, html });
   }
-
-  // Payment monitoring failure notification
   async sendPaymentMonitoringFailureEmail(
     email: string,
     data: {
@@ -268,7 +241,6 @@ export class EmailService {
       html,
     });
   }
-
   async sendGiftDeliveryEmail(data: {
     recipientEmail: string;
     senderName: string;
@@ -283,7 +255,6 @@ export class EmailService {
       html,
     });
   }
-
   async sendPasswordChangeNotification(email: string): Promise<void> {
     const html = this.templateService.generatePasswordChangeNotification();
     await this.sendEmail({
@@ -292,7 +263,6 @@ export class EmailService {
       html,
     });
   }
-
   async sendAccountDeletionNotification(email: string): Promise<void> {
     const html = this.templateService.generateAccountDeletionNotification();
     await this.sendEmail({

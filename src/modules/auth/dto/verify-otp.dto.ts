@@ -1,6 +1,5 @@
 import { IsEmail, IsString, Length } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
-
 export class VerifyOtpDto {
   @ApiProperty({
     description: "User email address",
@@ -8,7 +7,6 @@ export class VerifyOtpDto {
   })
   @IsEmail()
   email: string;
-
   @ApiProperty({
     description: "6-digit OTP code sent to email",
     example: "123456",

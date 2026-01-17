@@ -36,13 +36,15 @@ import { MatchData } from "../../common/entities/match-data.entity";
 import { User } from "../../common/entities/user.entity";
 import { PredictionType } from "../../common/enums/prediction-type.enum";
 import { AppSettings } from "../../common/entities/app-settings.entity";
+import { Purchase } from "../../common/entities/purchase.entity";
+import { PurchaseStatusType } from "../../common/enums/purchase-status-type.enum";
 
 @Injectable()
 export class TipsService {
   private readonly logger = new Logger(TipsService.name);
-  private static readonly MIN_PRICE = 1.0; // Minimum price for paid tips
-  private static readonly MAX_PRICE = 100.0; // Maximum price for tips (USD)
-  private static readonly MAX_SELECTIONS = 50; // Maximum number of selections per tip (prevent abuse)
+  private static readonly MIN_PRICE = 1.0;
+  private static readonly MAX_PRICE = 100.0;
+  private static readonly MAX_SELECTIONS = 50;
 
   constructor(
     @InjectRepository(Tip)
@@ -57,7 +59,9 @@ export class TipsService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(AppSettings)
     private readonly appSettingsRepository: Repository<AppSettings>,
-    private readonly dataSource: DataSource
+    @InjectRepository(Purchase)
+    private readonly purchaseRepository: Repository<Purchase>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async getTips(
@@ -68,34 +72,30 @@ export class TipsService {
     status?: string,
     isFree?: boolean,
     page: number = 0,
-    size: number = 20
+    size: number = 20,
   ): Promise<TipsPageResponseDto> {
     this.logger.debug(
-      `Fetching tips with filters: keyword=${keyword}, tipsterId=${tipsterId}, minPrice=${minPrice}, maxPrice=${maxPrice}, status=${status}, isFree=${isFree}, page=${page}, size=${size}`
+      `Fetching tips with filters: keyword=${keyword}, tipsterId=${tipsterId}, minPrice=${minPrice}, maxPrice=${maxPrice}, status=${status}, isFree=${isFree}, page=${page}, size=${size}`,
     );
 
-    // Build query with filters
     let query = this.tipRepository
       .createQueryBuilder("tip")
       .leftJoinAndSelect("tip.tipster", "tipster")
       .leftJoinAndSelect("tipster.user", "user")
       .where("tip.isPublished = :isPublished", { isPublished: true });
 
-    // Keyword search (title or description)
     if (keyword && keyword.trim() !== "") {
       const keywordPattern = `%${keyword.toLowerCase()}%`;
       query = query.andWhere(
         "(LOWER(tip.title) LIKE :keyword OR LOWER(tip.description) LIKE :keyword)",
-        { keyword: keywordPattern }
+        { keyword: keywordPattern },
       );
     }
 
-    // Tipster filter
     if (tipsterId) {
       query = query.andWhere("tipster.id = :tipsterId", { tipsterId });
     }
 
-    // Price filters
     if (isFree !== null && isFree !== undefined) {
       if (isFree) {
         query = query.andWhere("tip.price = :price", { price: 0 });
@@ -111,7 +111,6 @@ export class TipsService {
       }
     }
 
-    // Status filter
     if (status && status.trim() !== "") {
       try {
         const statusEnum =
@@ -122,36 +121,27 @@ export class TipsService {
           });
         }
       } catch (error) {
-        // Invalid status, ignore
         this.logger.debug(`Invalid status filter: ${status}`);
       }
     }
 
-    // Count total before pagination
     const totalElements = await query.getCount();
 
-    // Sort by top tipsters (rating, success rate) then by latest (publishedAt, createdAt)
-    // This ensures tips from top tipsters appear first, then sorted by latest
     query = query
       .orderBy("tipster.rating", "DESC")
       .addOrderBy("tipster.successRate", "DESC")
       .addOrderBy("tip.publishedAt", "DESC")
       .addOrderBy("tip.createdAt", "DESC");
 
-    // Apply pagination
     const skip = page * size;
     query = query.skip(skip).take(size);
 
-    // Execute query
     const tips = await query.getMany();
 
-    // Map to response DTOs
     const tipResponses = tips.map((tip) => this.mapToResponse(tip));
 
-    // Count free tips (tips where price = 0)
     const freeTipsCount = await this.countFreeTips();
 
-    // Count available tips (tips where all matches are still valid and none have started)
     const availableTipsCount = await this.countAvailableTips();
 
     const response: TipsPageResponseDto = {
@@ -165,7 +155,7 @@ export class TipsService {
     };
 
     this.logger.log(
-      `Retrieved ${tips.length} tips (page ${page}, total: ${totalElements})`
+      `Retrieved ${tips.length} tips (page ${page}, total: ${totalElements})`,
     );
     return response;
   }
@@ -186,7 +176,6 @@ export class TipsService {
     response.createdAt = tip.createdAt;
     response.isPublished = tip.isPublished;
 
-    // Map tipster info
     if (tip.tipster) {
       const tipsterInfo = new TipsterBasicInfoDto();
       tipsterInfo.id = tip.tipster.id;
@@ -195,7 +184,6 @@ export class TipsService {
       tipsterInfo.isVerified = tip.tipster.isVerified;
       tipsterInfo.totalTips = tip.tipster.totalTips;
 
-      // Get display name and avatar from user
       if (tip.tipster.user) {
         tipsterInfo.displayName =
           tip.tipster.user.displayName ||
@@ -211,9 +199,73 @@ export class TipsService {
     return response;
   }
 
-  /**
-   * Count free tips (tips where price = 0)
-   */
+  async getMyTips(
+    userId: string,
+    page: number = 0,
+    size: number = 20,
+  ): Promise<TipsPageResponseDto> {
+    this.logger.debug(
+      `Fetching tips for user ${userId}, page=${page}, size=${size}`,
+    );
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user || !user.isActive) {
+      throw new NotFoundException("User not found or inactive");
+    }
+
+    const tipster = await this.tipsterRepository.findOne({
+      where: { user: { id: userId } },
+    });
+
+    if (!tipster) {
+      return {
+        tips: [],
+        totalElements: 0,
+        totalPages: 0,
+        currentPage: page,
+        pageSize: size,
+        freeTipsCount: 0,
+        availableTipsCount: 0,
+      };
+    }
+
+    let query = this.tipRepository
+      .createQueryBuilder("tip")
+      .leftJoinAndSelect("tip.tipster", "tipster")
+      .leftJoinAndSelect("tipster.user", "user")
+      .where("tipster.id = :tipsterId", { tipsterId: tipster.id });
+
+    const totalElements = await query.getCount();
+
+    query = query.orderBy("tip.createdAt", "DESC");
+
+    const skip = page * size;
+    query = query.skip(skip).take(size);
+
+    const tips = await query.getMany();
+
+    const tipResponses = tips.map((tip) => this.mapToResponse(tip));
+
+    const response: TipsPageResponseDto = {
+      tips: tipResponses,
+      totalElements,
+      totalPages: Math.ceil(totalElements / size),
+      currentPage: page,
+      pageSize: size,
+      freeTipsCount: 0,
+      availableTipsCount: 0,
+    };
+
+    this.logger.log(
+      `Retrieved ${tips.length} tips for user ${userId} (page ${page}, total: ${totalElements})`,
+    );
+
+    return response;
+  }
+
   private async countFreeTips(): Promise<number> {
     return this.tipRepository.count({
       where: {
@@ -223,61 +275,42 @@ export class TipsService {
     });
   }
 
-  /**
-   * Count available tips (tips where all matches are still valid and none have started)
-   * A tip is available if:
-   * - It is published
-   * - All its matches have status = scheduled
-   * - All its matches have matchDate > now (not started)
-   * Uses a query similar to the Java NOT EXISTS approach
-   */
   private async countAvailableTips(): Promise<number> {
     const now = new Date();
 
-    // Count tips that are published and have no invalid matches
-    // A tip is available if it doesn't have any selections with matches that are:
-    // - Not scheduled, OR
-    // - Already started (matchDate <= now)
-    // Using raw SQL with NOT EXISTS subquery for efficiency
     const result = await this.tipRepository
       .createQueryBuilder("tip")
       .select("COUNT(DISTINCT tip.id)", "count")
       .where("tip.isPublished = :isPublished", { isPublished: true })
       .andWhere(
         `NOT EXISTS (
-          SELECT 1 
+          SELECT 1
           FROM tip_selections ts
           INNER JOIN match_data m ON ts.match_id = m.id
           WHERE ts.tip_id = tip.id
             AND (m.status != :scheduledStatus OR m.match_datetime <= :now)
         )`,
         {
-          scheduledStatus: MatchStatusType.scheduled, // "scheduled"
+          scheduledStatus: MatchStatusType.scheduled,
           now: now.toISOString(),
-        }
+        },
       )
       .getRawOne<{ count: string }>();
 
     return result ? parseInt(result.count, 10) : 0;
   }
 
-  /**
-   * Create a new tip with validations and security checks
-   * Only users with TIPSTER role can create tips
-   */
   async createTip(
     createTipDto: CreateTipDto,
-    userId: string
+    userId: string,
   ): Promise<TipResponseDto> {
     this.logger.debug(`Creating tip for user ${userId}: ${createTipDto.title}`);
 
-    // Start transaction for atomicity
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      // 1. Validate user exists and is active
       const user = await queryRunner.manager.findOne(User, {
         where: { id: userId },
       });
@@ -286,7 +319,6 @@ export class TipsService {
         throw new NotFoundException("User not found or inactive");
       }
 
-      // 2. Validate user has TIPSTER role
       const userRoles = await queryRunner.manager
         .createQueryBuilder()
         .from("user_roles", "ur")
@@ -298,19 +330,17 @@ export class TipsService {
 
       if (!hasTipsterRole) {
         this.logger.warn(
-          `User ${userId} attempted to create tip without TIPSTER role`
+          `User ${userId} attempted to create tip without TIPSTER role`,
         );
         throw new ForbiddenException("Only tipsters can create tips");
       }
 
-      // 3. Get or create tipster record
       let tipster = await queryRunner.manager.findOne(Tipster, {
         where: { user: { id: userId } },
         relations: ["user"],
       });
 
       if (!tipster) {
-        // Create tipster record if it doesn't exist
         tipster = queryRunner.manager.create(Tipster, {
           user: { id: userId },
           isAi: false,
@@ -326,10 +356,8 @@ export class TipsService {
         this.logger.log(`Created tipster record for user ${userId}`);
       }
 
-      // 4. Validate and sanitize input
       this.validateCreateTipDto(createTipDto);
 
-      // 5. Create tip entity (can be created without selections for draft mode)
       const tip = queryRunner.manager.create(Tip, {
         tipster: { id: tipster.id },
         isAi: false,
@@ -337,24 +365,22 @@ export class TipsService {
         description: createTipDto.description?.trim() || null,
         price: createTipDto.price,
         status: TipStatusType.PENDING,
-        isPublished: false, // Tips are not published by default
+        isPublished: false,
         purchasesCount: 0,
         totalRevenue: 0,
       });
 
-      // 6. Process selections if provided
       let totalOdds = 1.0;
       let earliestMatchDate: Date | null = null;
       const selections: TipSelection[] = [];
 
       if (createTipDto.selections && createTipDto.selections.length > 0) {
-        // Validate all matches exist and are scheduled
         const matchIds = createTipDto.selections.map((s) => s.matchId);
         const uniqueMatchIds = [...new Set(matchIds)];
 
         if (uniqueMatchIds.length > TipsService.MAX_SELECTIONS) {
           throw new BadRequestException(
-            `Maximum ${TipsService.MAX_SELECTIONS} selections allowed per tip`
+            `Maximum ${TipsService.MAX_SELECTIONS} selections allowed per tip`,
           );
         }
 
@@ -366,77 +392,71 @@ export class TipsService {
           const foundIds = new Set(matches.map((m) => m.id));
           const missingIds = uniqueMatchIds.filter((id) => !foundIds.has(id));
           throw new NotFoundException(
-            `Matches not found: ${missingIds.join(", ")}`
+            `Matches not found: ${missingIds.join(", ")}`,
           );
         }
 
-        // Validate all matches are scheduled and not started
         const now = new Date();
         const invalidMatches = matches.filter(
           (m) =>
-            m.status !== MatchStatusType.scheduled || m.matchDatetime <= now
+            m.status !== MatchStatusType.scheduled || m.matchDatetime <= now,
         );
 
         if (invalidMatches.length > 0) {
           throw new BadRequestException(
-            `Cannot create tip: ${invalidMatches.length} match(es) are not scheduled or have already started`
+            `Cannot create tip: ${invalidMatches.length} match(es) are not scheduled or have already started`,
           );
         }
 
-        // Find earliest match date
         for (const match of matches) {
           if (!earliestMatchDate || match.matchDatetime < earliestMatchDate) {
             earliestMatchDate = match.matchDatetime;
           }
         }
 
-        // Create tip selections and calculate total odds
-        const selectionKeys = new Set<string>(); // For duplicate detection
+        const selectionKeys = new Set<string>();
 
         for (const selectionDto of createTipDto.selections) {
           const match = matches.find((m) => m.id === selectionDto.matchId);
           if (!match) {
             throw new NotFoundException(
-              `Match not found: ${selectionDto.matchId}`
+              `Match not found: ${selectionDto.matchId}`,
             );
           }
 
-          // Map prediction string to prediction type and value
           const { predictionType, predictionValue } = this.mapPredictionString(
-            selectionDto.prediction
+            selectionDto.prediction,
           );
 
-          // Validate odds only if provided (can be null)
           if (
             selectionDto.odds !== undefined &&
             selectionDto.odds !== null &&
             selectionDto.odds < 1.0
           ) {
             throw new BadRequestException(
-              `Invalid odds for selection on match ${match.id}: odds must be at least 1.0 if provided`
+              `Invalid odds for selection on match ${match.id}: odds must be at least 1.0 if provided`,
             );
           }
 
-          // Check for duplicate selections (same match, prediction type, and value)
           const selectionKey = `${selectionDto.matchId}-${predictionType}-${predictionValue}`;
           if (selectionKeys.has(selectionKey)) {
             throw new BadRequestException(
-              `Duplicate selection: match ${selectionDto.matchId} with prediction ${selectionDto.prediction}`
+              `Duplicate selection: match ${selectionDto.matchId} with prediction ${selectionDto.prediction}`,
             );
           }
           selectionKeys.add(selectionKey);
 
           const selection = queryRunner.manager.create(TipSelection, {
-            tip: tip, // Will be set after tip is saved
+            tip: tip,
             match: match,
             predictionType: predictionType,
             predictionValue: predictionValue,
-            odds: selectionDto.odds ?? undefined, // Allow null/undefined odds (TypeORM maps undefined to NULL)
+            odds: selectionDto.odds ?? undefined,
             isVoid: false,
           });
 
           selections.push(selection);
-          // Only multiply by odds if provided (skip if null/undefined)
+
           if (selectionDto.odds && selectionDto.odds >= 1.0) {
             totalOdds *= selectionDto.odds;
           }
@@ -446,23 +466,19 @@ export class TipsService {
         tip.earliestMatchDate = earliestMatchDate;
       }
 
-      // 7. Save tip first (to get ID)
       const savedTip = await queryRunner.manager.save(Tip, tip);
 
-      // 8. Save selections with tip ID if any
       for (const selection of selections) {
         selection.tip = savedTip;
         await queryRunner.manager.save(TipSelection, selection);
       }
 
-      // 11. Commit transaction
       await queryRunner.commitTransaction();
 
       this.logger.log(
-        `Successfully created tip ${savedTip.id} by user ${userId} with ${selections.length} selections`
+        `Successfully created tip ${savedTip.id} by user ${userId} with ${selections.length} selections`,
       );
 
-      // 12. Load tip with relations for response
       const tipWithRelations = await this.tipRepository.findOne({
         where: { id: savedTip.id },
         relations: ["tipster", "tipster.user"],
@@ -470,7 +486,7 @@ export class TipsService {
 
       if (!tipWithRelations) {
         throw new InternalServerErrorException(
-          "Failed to retrieve created tip"
+          "Failed to retrieve created tip",
         );
       }
 
@@ -479,7 +495,6 @@ export class TipsService {
       await queryRunner.rollbackTransaction();
       this.logger.error(`Error creating tip: ${error.message}`, error.stack);
 
-      // Re-throw known exceptions
       if (
         error instanceof BadRequestException ||
         error instanceof ForbiddenException ||
@@ -488,18 +503,13 @@ export class TipsService {
         throw error;
       }
 
-      // Wrap unknown errors
       throw new InternalServerErrorException("Failed to create tip");
     } finally {
       await queryRunner.release();
     }
   }
 
-  /**
-   * Validate create tip DTO with comprehensive checks
-   */
   private validateCreateTipDto(dto: CreateTipDto): void {
-    // Validate title
     if (!dto.title || typeof dto.title !== "string") {
       throw new BadRequestException("Title is required and must be a string");
     }
@@ -513,7 +523,6 @@ export class TipsService {
       throw new BadRequestException("Title must not exceed 255 characters");
     }
 
-    // Validate price
     if (
       dto.price === null ||
       dto.price === undefined ||
@@ -526,20 +535,18 @@ export class TipsService {
       throw new BadRequestException("Price must be at least 0");
     }
 
-    // If price > 0, enforce minimum and maximum price
     if (dto.price > 0 && dto.price < TipsService.MIN_PRICE) {
       throw new BadRequestException(
-        `Price must be at least ${TipsService.MIN_PRICE} USD for paid tips, or 0 for free tips`
+        `Price must be at least ${TipsService.MIN_PRICE} USD for paid tips, or 0 for free tips`,
       );
     }
 
     if (dto.price > TipsService.MAX_PRICE) {
       throw new BadRequestException(
-        `Price must not exceed ${TipsService.MAX_PRICE} USD`
+        `Price must not exceed ${TipsService.MAX_PRICE} USD`,
       );
     }
 
-    // Validate selections (optional for draft tips)
     if (dto.selections !== undefined) {
       if (!Array.isArray(dto.selections)) {
         throw new BadRequestException("Selections must be an array");
@@ -547,79 +554,70 @@ export class TipsService {
 
       if (dto.selections.length > TipsService.MAX_SELECTIONS) {
         throw new BadRequestException(
-          `Maximum ${TipsService.MAX_SELECTIONS} selections allowed per tip`
+          `Maximum ${TipsService.MAX_SELECTIONS} selections allowed per tip`,
         );
       }
     }
 
-    // Validate each selection
     for (let i = 0; i < dto.selections.length; i++) {
       const selection = dto.selections[i];
       if (!selection.matchId || typeof selection.matchId !== "string") {
         throw new BadRequestException(
-          `Selection ${i + 1}: matchId is required and must be a string`
+          `Selection ${i + 1}: matchId is required and must be a string`,
         );
       }
 
       if (!selection.prediction || typeof selection.prediction !== "string") {
         throw new BadRequestException(
-          `Selection ${i + 1}: prediction is required and must be a string`
+          `Selection ${i + 1}: prediction is required and must be a string`,
         );
       }
 
-      // Odds are optional (can be null), but if provided, must be valid
       if (selection.odds !== undefined && selection.odds !== null) {
         if (typeof selection.odds !== "number") {
           throw new BadRequestException(
-            `Selection ${i + 1}: odds must be a number if provided`
+            `Selection ${i + 1}: odds must be a number if provided`,
           );
         }
 
         if (selection.odds < 1.0) {
           throw new BadRequestException(
-            `Selection ${i + 1}: odds must be at least 1.0 if provided`
+            `Selection ${i + 1}: odds must be at least 1.0 if provided`,
           );
         }
 
         if (selection.odds > 1000) {
           throw new BadRequestException(
-            `Selection ${i + 1}: odds must not exceed 1000`
+            `Selection ${i + 1}: odds must not exceed 1000`,
           );
         }
       }
     }
 
-    // Validate description (if provided)
     if (dto.description !== undefined && dto.description !== null) {
       if (typeof dto.description !== "string") {
         throw new BadRequestException("Description must be a string");
       }
 
-      // Limit description length (optional - can be removed if unlimited)
       const maxDescriptionLength = 10000;
       if (dto.description.length > maxDescriptionLength) {
         throw new BadRequestException(
-          `Description must not exceed ${maxDescriptionLength} characters`
+          `Description must not exceed ${maxDescriptionLength} characters`,
         );
       }
     }
   }
 
-  /**
-   * Map prediction string to PredictionType enum and value
-   * Supports common prediction formats from frontend
-   */
   private mapPredictionString(
     prediction: string,
     predictionValueFromDto?: string,
-    betLine?: number
+    betLine?: number,
   ): {
     predictionType: PredictionType;
     predictionValue: string;
   } {
     const normalized = prediction.toLowerCase().trim();
 
-    // Match result predictions
     if (normalized === "home_win" || normalized === "home") {
       return {
         predictionType: PredictionType.MATCH_RESULT,
@@ -639,7 +637,6 @@ export class TipsService {
       };
     }
 
-    // Over/Under predictions
     const overUnderMatch = normalized.match(/^(over|under)[_\s]?(\d+\.?\d*)$/);
     if (overUnderMatch) {
       const direction = overUnderMatch[1];
@@ -650,7 +647,6 @@ export class TipsService {
       };
     }
 
-    // Both teams to score
     if (
       normalized === "btts_yes" ||
       normalized === "btts yes" ||
@@ -672,7 +668,6 @@ export class TipsService {
       };
     }
 
-    // Double chance
     if (normalized === "home_draw" || normalized === "1x") {
       return {
         predictionType: PredictionType.DOUBLE_CHANCE,
@@ -692,10 +687,7 @@ export class TipsService {
       };
     }
 
-    // Handicap predictions
-    // Formats: "handicap", "home_-1.5", "away_+1.5", etc.
     if (normalized === "handicap" || normalized.includes("handicap")) {
-      // If it's just "handicap", construct the value from predictionValue or betLine
       if (normalized === "handicap") {
         if (predictionValueFromDto) {
           return {
@@ -703,8 +695,7 @@ export class TipsService {
             predictionValue: predictionValueFromDto,
           };
         }
-        // If betLine is provided, construct a generic handicap value
-        // Note: We don't know home/away from just betLine, so use a generic format
+
         if (betLine !== undefined) {
           const sign = betLine >= 0 ? "+" : "";
           return {
@@ -717,22 +708,19 @@ export class TipsService {
           predictionValue: "handicap",
         };
       }
-      // If it contains "handicap" and has a value like "home_-1.5", use it as-is
+
       return {
         predictionType: PredictionType.HANDICAP,
         predictionValue: normalized,
       };
     }
 
-    // Default: treat as custom prediction value
-    // Store as-is but validate length
     if (normalized.length > 100) {
       throw new BadRequestException(
-        `Prediction value must not exceed 100 characters: ${prediction}`
+        `Prediction value must not exceed 100 characters: ${prediction}`,
       );
     }
 
-    // Try to infer type from value
     if (normalized.startsWith("over_") || normalized.startsWith("under_")) {
       return {
         predictionType: PredictionType.OVER_UNDER,
@@ -762,24 +750,20 @@ export class TipsService {
       };
     }
 
-    // Default to MATCH_RESULT for unrecognized formats
     return {
       predictionType: PredictionType.MATCH_RESULT,
       predictionValue: normalized,
     };
   }
 
-  /**
-   * Get tip details for editing
-   * Only accessible by the tip creator and only if the tip is not published
-   */
   async getTipForEditing(
     tipId: string,
-    userId: string
+    userId: string,
   ): Promise<TipEditingResponseDto> {
-    this.logger.debug(`Getting tip ${tipId} for editing by user ${userId}`);
+    this.logger.debug(
+      `Getting tip ${tipId} for editing/viewing by user ${userId}`,
+    );
 
-    // 1. Validate user exists and is active
     const user = await this.userRepository.findOne({
       where: { id: userId },
     });
@@ -788,7 +772,6 @@ export class TipsService {
       throw new NotFoundException("User not found or inactive");
     }
 
-    // 2. Validate user has TIPSTER role
     const userRoles = await this.dataSource
       .createQueryBuilder()
       .from("user_roles", "ur")
@@ -799,10 +782,9 @@ export class TipsService {
     const hasTipsterRole = roles.includes("TIPSTER");
 
     if (!hasTipsterRole) {
-      throw new ForbiddenException("Only tipsters can edit tips");
+      throw new ForbiddenException("Only tipsters can view tips");
     }
 
-    // 3. Get tip with tipster relation and selections
     const tip = await this.tipRepository.findOne({
       where: { id: tipId },
       relations: ["tipster", "tipster.user"],
@@ -812,25 +794,15 @@ export class TipsService {
       throw new NotFoundException(`Tip not found: ${tipId}`);
     }
 
-    // 4. Verify tip belongs to the user
     if (tip.tipster.user?.id !== userId) {
-      throw new ForbiddenException("You can only edit your own tips");
+      throw new ForbiddenException("You can only view your own tips");
     }
 
-    // 5. Verify tip is not published
-    if (tip.isPublished) {
-      throw new BadRequestException(
-        "Cannot edit tip: tip has already been published and is available for purchase"
-      );
-    }
-
-    // 6. Load selections with match relation
     const selections = await this.tipSelectionRepository.find({
       where: { tip: { id: tipId } },
       relations: ["match"],
     });
 
-    // 7. Map to response DTO
     const response = new TipEditingResponseDto();
     response.id = tip.id;
     response.title = tip.title;
@@ -844,7 +816,6 @@ export class TipsService {
     response.earliestMatchDate = tip.earliestMatchDate || null;
     response.createdAt = tip.createdAt;
 
-    // Map tipster info
     if (tip.tipster) {
       const tipsterInfo = new TipsterBasicInfoDto();
       tipsterInfo.id = tip.tipster.id;
@@ -853,7 +824,6 @@ export class TipsService {
       tipsterInfo.isVerified = tip.tipster.isVerified;
       tipsterInfo.totalTips = tip.tipster.totalTips;
 
-      // Get display name and avatar from user
       if (tip.tipster.user) {
         tipsterInfo.displayName =
           tip.tipster.user.displayName ||
@@ -866,7 +836,6 @@ export class TipsService {
       response.tipster = tipsterInfo;
     }
 
-    // Map selections
     response.selections = selections.map((sel) => {
       const selectionDto = new TipSelectionEditingDto();
       selectionDto.id = sel.id;
@@ -883,15 +852,10 @@ export class TipsService {
     return response;
   }
 
-  /**
-   * Update a tip (title, description, price)
-   * Only allowed if tip is not published (isPublished = false)
-   * Only the tip owner can update it
-   */
   async updateTip(
     tipId: string,
     updateTipDto: UpdateTipDto,
-    userId: string
+    userId: string,
   ): Promise<TipResponseDto> {
     this.logger.debug(`Updating tip ${tipId} by user ${userId}`);
 
@@ -900,7 +864,6 @@ export class TipsService {
     await queryRunner.startTransaction();
 
     try {
-      // 1. Validate user exists and is active
       const user = await queryRunner.manager.findOne(User, {
         where: { id: userId },
       });
@@ -909,7 +872,6 @@ export class TipsService {
         throw new NotFoundException("User not found or inactive");
       }
 
-      // 2. Validate user has TIPSTER role
       const userRoles = await queryRunner.manager
         .createQueryBuilder()
         .from("user_roles", "ur")
@@ -923,7 +885,6 @@ export class TipsService {
         throw new ForbiddenException("Only tipsters can update tips");
       }
 
-      // 3. Get tip with tipster relation
       const tip = await queryRunner.manager.findOne(Tip, {
         where: { id: tipId },
         relations: ["tipster", "tipster.user"],
@@ -933,19 +894,16 @@ export class TipsService {
         throw new NotFoundException(`Tip not found: ${tipId}`);
       }
 
-      // 4. Verify tip belongs to the user
       if (tip.tipster.user?.id !== userId) {
         throw new ForbiddenException("You can only update your own tips");
       }
 
-      // 5. Verify tip is not published
       if (tip.isPublished) {
         throw new BadRequestException(
-          "Cannot update tip: tip has already been published and is available for purchase"
+          "Cannot update tip: tip has already been published and is available for purchase",
         );
       }
 
-      // 6. Update tip fields
       if (updateTipDto.title !== undefined) {
         const trimmedTitle = updateTipDto.title.trim();
         if (trimmedTitle.length === 0) {
@@ -970,26 +928,23 @@ export class TipsService {
           updateTipDto.price < TipsService.MIN_PRICE
         ) {
           throw new BadRequestException(
-            `Price must be at least ${TipsService.MIN_PRICE} USD for paid tips, or 0 for free tips`
+            `Price must be at least ${TipsService.MIN_PRICE} USD for paid tips, or 0 for free tips`,
           );
         }
         if (updateTipDto.price > TipsService.MAX_PRICE) {
           throw new BadRequestException(
-            `Price must not exceed ${TipsService.MAX_PRICE} USD`
+            `Price must not exceed ${TipsService.MAX_PRICE} USD`,
           );
         }
         tip.price = updateTipDto.price;
       }
 
-      // 7. Save updated tip
       const updatedTip = await queryRunner.manager.save(Tip, tip);
 
-      // 8. Commit transaction
       await queryRunner.commitTransaction();
 
       this.logger.log(`Successfully updated tip ${tipId} by user ${userId}`);
 
-      // 9. Load tip with relations for response
       const tipWithRelations = await this.tipRepository.findOne({
         where: { id: updatedTip.id },
         relations: ["tipster", "tipster.user"],
@@ -997,7 +952,7 @@ export class TipsService {
 
       if (!tipWithRelations) {
         throw new InternalServerErrorException(
-          "Failed to retrieve updated tip"
+          "Failed to retrieve updated tip",
         );
       }
 
@@ -1020,18 +975,13 @@ export class TipsService {
     }
   }
 
-  /**
-   * Add or update a selection to a tip
-   * Only allowed if tip is not published
-   * Only the tip owner can add selections
-   */
   async addSelection(
     tipId: string,
     addSelectionDto: AddSelectionDto,
-    userId: string
+    userId: string,
   ): Promise<TipResponseDto> {
     this.logger.debug(
-      `Adding selection to tip ${tipId} by user ${userId}: match ${addSelectionDto.matchId}, prediction ${addSelectionDto.prediction}`
+      `Adding selection to tip ${tipId} by user ${userId}: match ${addSelectionDto.matchId}, prediction ${addSelectionDto.prediction}`,
     );
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -1039,7 +989,6 @@ export class TipsService {
     await queryRunner.startTransaction();
 
     try {
-      // 1. Validate user exists and is active
       const user = await queryRunner.manager.findOne(User, {
         where: { id: userId },
       });
@@ -1048,7 +997,6 @@ export class TipsService {
         throw new NotFoundException("User not found or inactive");
       }
 
-      // 2. Validate user has TIPSTER role
       const userRoles = await queryRunner.manager
         .createQueryBuilder()
         .from("user_roles", "ur")
@@ -1060,11 +1008,10 @@ export class TipsService {
 
       if (!hasTipsterRole) {
         throw new ForbiddenException(
-          "Only tipsters can add selections to tips"
+          "Only tipsters can add selections to tips",
         );
       }
 
-      // 3. Get tip with tipster relation (don't load selections to avoid relation tracking issues)
       const tip = await queryRunner.manager.findOne(Tip, {
         where: { id: tipId },
         relations: ["tipster", "tipster.user"],
@@ -1074,35 +1021,31 @@ export class TipsService {
         throw new NotFoundException(`Tip not found: ${tipId}`);
       }
 
-      // Validate tipId is actually set
       if (!tip.id || tip.id !== tipId) {
         throw new InternalServerErrorException(
-          `Tip ID mismatch: expected ${tipId}, got ${tip.id}`
+          `Tip ID mismatch: expected ${tipId}, got ${tip.id}`,
         );
       }
 
-      // 4. Verify tip belongs to the user
       if (tip.tipster.user?.id !== userId) {
         throw new ForbiddenException(
-          "You can only add selections to your own tips"
+          "You can only add selections to your own tips",
         );
       }
 
-      // 5. Verify tip is not published
       if (tip.isPublished) {
         throw new BadRequestException(
-          "Cannot add selections: tip has already been published and is available for purchase"
+          "Cannot add selections: tip has already been published and is available for purchase",
         );
       }
 
-      // 6. Validate match exists and is scheduled
       const match = await queryRunner.manager.findOne(MatchData, {
         where: { id: addSelectionDto.matchId },
       });
 
       if (!match) {
         throw new NotFoundException(
-          `Match not found: ${addSelectionDto.matchId}`
+          `Match not found: ${addSelectionDto.matchId}`,
         );
       }
 
@@ -1112,22 +1055,20 @@ export class TipsService {
         match.matchDatetime <= now
       ) {
         throw new BadRequestException(
-          "Cannot add selection: match is not scheduled or has already started"
+          "Cannot add selection: match is not scheduled or has already started",
         );
       }
 
-      // 7. Map prediction string to prediction type and value
       const { predictionType, predictionValue } = this.mapPredictionString(
         addSelectionDto.prediction,
         undefined,
-        addSelectionDto.betLine
+        addSelectionDto.betLine,
       );
 
-      // 8. Validate odds (optional, can be null)
       if (addSelectionDto.odds !== undefined && addSelectionDto.odds !== null) {
         if (addSelectionDto.odds < 1.0) {
           throw new BadRequestException(
-            "Odds must be at least 1.0 if provided"
+            "Odds must be at least 1.0 if provided",
           );
         }
 
@@ -1136,7 +1077,6 @@ export class TipsService {
         }
       }
 
-      // 9. Check for existing selection with same match, prediction type, and value
       const existingSelection = await queryRunner.manager.findOne(
         TipSelection,
         {
@@ -1146,10 +1086,9 @@ export class TipsService {
             predictionType: predictionType,
             predictionValue: predictionValue,
           },
-        }
+        },
       );
 
-      // Define mutually exclusive types (only one can exist per match)
       const mutuallyExclusiveTypes = [
         PredictionType.MATCH_RESULT,
         PredictionType.DOUBLE_CHANCE,
@@ -1159,12 +1098,9 @@ export class TipsService {
       const isMutuallyExclusiveType =
         mutuallyExclusiveTypes.includes(predictionType);
 
-      // 10. Handle mutual exclusivity (match_result, double_chance, handicap)
-      // For these types, UPDATE the existing selection instead of deleting and creating
       let selectionToUpdate: TipSelection | null = null;
 
       if (isMutuallyExclusiveType) {
-        // Check if there's an existing selection of any mutually exclusive type for this match
         const existingMutuallyExclusiveSelection =
           await queryRunner.manager.findOne(TipSelection, {
             where: {
@@ -1175,31 +1111,24 @@ export class TipsService {
           });
 
         if (existingMutuallyExclusiveSelection) {
-          // If it's the same selection (same type and value), we'll handle it below
-          // If it's a different mutually exclusive type, UPDATE it instead of deleting
           if (
             existingMutuallyExclusiveSelection.predictionType ===
               predictionType &&
             existingMutuallyExclusiveSelection.predictionValue ===
               predictionValue
           ) {
-            // Same selection - check if it's the exact same (will be handled by existingSelection check below)
             selectionToUpdate = existingMutuallyExclusiveSelection;
           } else {
-            // Different mutually exclusive type - UPDATE it with new type and value
             selectionToUpdate = existingMutuallyExclusiveSelection;
           }
         }
       }
 
-      // 11. Handle existing selection with same match, type, and value
       if (existingSelection) {
-        // Same selection already exists - delete it (deselecting)
         await queryRunner.manager.delete(TipSelection, {
           id: existingSelection.id,
         });
 
-        // Recalculate total odds after deletion
         const allSelections = await queryRunner.manager.find(TipSelection, {
           where: { tip: { id: tipId } },
           relations: ["match"],
@@ -1223,15 +1152,18 @@ export class TipsService {
         }
 
         await queryRunner.manager.query(
-          `UPDATE tips 
+          `UPDATE tips
            SET total_odds = $1, earliest_match_date = $2, updated_at = NOW()
            WHERE id = $3::uuid`,
-          [totalOdds > 1.0 ? totalOdds : null, earliestMatchDate || null, tipId]
+          [
+            totalOdds > 1.0 ? totalOdds : null,
+            earliestMatchDate || null,
+            tipId,
+          ],
         );
 
         await queryRunner.commitTransaction();
 
-        // Return updated tip
         const tipWithRelations = await this.tipRepository.findOne({
           where: { id: tipId },
           relations: ["tipster", "tipster.user"],
@@ -1239,21 +1171,19 @@ export class TipsService {
 
         if (!tipWithRelations) {
           throw new InternalServerErrorException(
-            "Failed to retrieve updated tip"
+            "Failed to retrieve updated tip",
           );
         }
 
         return this.mapToResponse(tipWithRelations);
       }
 
-      // 12. If we have a selection to update (mutually exclusive type switching)
       if (selectionToUpdate) {
-        // UPDATE the existing selection with new values
         await queryRunner.manager.query(
-          `UPDATE tip_selections 
-           SET prediction_type = $1::prediction_type, 
-               prediction_value = $2, 
-               odds = $3, 
+          `UPDATE tip_selections
+           SET prediction_type = $1::prediction_type,
+               prediction_value = $2,
+               odds = $3,
                updated_at = NOW()
            WHERE id = $4::uuid`,
           [
@@ -1261,10 +1191,9 @@ export class TipsService {
             predictionValue,
             addSelectionDto.odds ?? null,
             selectionToUpdate.id,
-          ]
+          ],
         );
 
-        // Recalculate total odds
         const allSelections = await queryRunner.manager.find(TipSelection, {
           where: { tip: { id: tipId } },
           relations: ["match"],
@@ -1288,15 +1217,18 @@ export class TipsService {
         }
 
         await queryRunner.manager.query(
-          `UPDATE tips 
+          `UPDATE tips
            SET total_odds = $1, earliest_match_date = $2, updated_at = NOW()
            WHERE id = $3::uuid`,
-          [totalOdds > 1.0 ? totalOdds : null, earliestMatchDate || null, tipId]
+          [
+            totalOdds > 1.0 ? totalOdds : null,
+            earliestMatchDate || null,
+            tipId,
+          ],
         );
 
         await queryRunner.commitTransaction();
 
-        // Return updated tip
         const tipWithRelations = await this.tipRepository.findOne({
           where: { id: tipId },
           relations: ["tipster", "tipster.user"],
@@ -1304,65 +1236,59 @@ export class TipsService {
 
         if (!tipWithRelations) {
           throw new InternalServerErrorException(
-            "Failed to retrieve updated tip"
+            "Failed to retrieve updated tip",
           );
         }
 
         return this.mapToResponse(tipWithRelations);
       }
 
-      // 13. Check if we're at the max selections limit (only for new selections)
       const currentSelectionsCount = await queryRunner.manager.count(
         TipSelection,
         {
           where: { tip: { id: tipId } },
-        }
+        },
       );
 
       if (currentSelectionsCount >= TipsService.MAX_SELECTIONS) {
         throw new BadRequestException(
-          `Maximum ${TipsService.MAX_SELECTIONS} selections allowed per tip`
+          `Maximum ${TipsService.MAX_SELECTIONS} selections allowed per tip`,
         );
       }
 
-      // 12. Create or update selection
-      // Use tipId and matchId directly - we know they exist because we loaded the entities
       this.logger.debug(
-        `Inserting selection: tipId=${tipId}, matchId=${addSelectionDto.matchId}, predictionType=${predictionType}, predictionValue=${predictionValue}`
+        `Inserting selection: tipId=${tipId}, matchId=${addSelectionDto.matchId}, predictionType=${predictionType}, predictionValue=${predictionValue}`,
       );
 
-      // Validate tipId is not null or undefined
       if (!tipId || tipId.trim() === "") {
         throw new InternalServerErrorException(
-          `Invalid tipId: ${tipId}. Cannot create selection.`
+          `Invalid tipId: ${tipId}. Cannot create selection.`,
         );
       }
 
-      // Use raw SQL insert with explicit tipId and matchId
       const insertResult = await queryRunner.manager.query(
         `INSERT INTO tip_selections (tip_id, match_id, prediction_type, prediction_value, odds, is_void, created_at, updated_at)
          VALUES ($1::uuid, $2::uuid, $3::prediction_type, $4, $5, $6, NOW(), NOW()) RETURNING id`,
         [
-          tipId, // Use tipId parameter directly
-          addSelectionDto.matchId, // Use matchId from DTO directly
+          tipId,
+          addSelectionDto.matchId,
           predictionType,
           predictionValue,
-          addSelectionDto.odds ?? null, // Allow null odds
+          addSelectionDto.odds ?? null,
           false,
-        ]
+        ],
       );
 
       if (!insertResult || insertResult.length === 0) {
         throw new InternalServerErrorException(
-          "Failed to create selection: no ID returned"
+          "Failed to create selection: no ID returned",
         );
       }
 
       this.logger.debug(
-        `Successfully inserted selection with ID: ${insertResult[0]?.id}`
+        `Successfully inserted selection with ID: ${insertResult[0]?.id}`,
       );
 
-      // 13. Recalculate total odds and earliest match date
       const allSelections = await queryRunner.manager.find(TipSelection, {
         where: { tip: { id: tipId } },
         relations: ["match"],
@@ -1383,25 +1309,22 @@ export class TipsService {
         }
       }
 
-      // Update tip's totalOdds and earliestMatchDate using raw SQL to avoid TypeORM relation issues
       const totalOddsValue = totalOdds > 1.0 ? totalOdds : null;
       const earliestMatchDateValue = earliestMatchDate || null;
 
       await queryRunner.manager.query(
-        `UPDATE tips 
+        `UPDATE tips
          SET total_odds = $1, earliest_match_date = $2, updated_at = NOW()
          WHERE id = $3::uuid`,
-        [totalOddsValue, earliestMatchDateValue, tipId]
+        [totalOddsValue, earliestMatchDateValue, tipId],
       );
 
-      // 14. Commit transaction
       await queryRunner.commitTransaction();
 
       this.logger.log(
-        `Successfully added selection to tip ${tipId} by user ${userId}`
+        `Successfully added selection to tip ${tipId} by user ${userId}`,
       );
 
-      // 15. Load tip with relations for response
       const tipWithRelations = await this.tipRepository.findOne({
         where: { id: tipId },
         relations: ["tipster", "tipster.user"],
@@ -1409,7 +1332,7 @@ export class TipsService {
 
       if (!tipWithRelations) {
         throw new InternalServerErrorException(
-          "Failed to retrieve updated tip"
+          "Failed to retrieve updated tip",
         );
       }
 
@@ -1418,7 +1341,7 @@ export class TipsService {
       await queryRunner.rollbackTransaction();
       this.logger.error(
         `Error adding selection: ${error.message}`,
-        error.stack
+        error.stack,
       );
 
       if (
@@ -1435,18 +1358,13 @@ export class TipsService {
     }
   }
 
-  /**
-   * Remove a selection from a tip
-   * Only allowed if tip is not published
-   * Only the tip owner can remove selections
-   */
   async removeSelection(
     tipId: string,
     selectionId: string,
-    userId: string
+    userId: string,
   ): Promise<TipResponseDto> {
     this.logger.debug(
-      `Removing selection ${selectionId} from tip ${tipId} by user ${userId}`
+      `Removing selection ${selectionId} from tip ${tipId} by user ${userId}`,
     );
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -1454,7 +1372,6 @@ export class TipsService {
     await queryRunner.startTransaction();
 
     try {
-      // 1. Validate user exists and is active
       const user = await queryRunner.manager.findOne(User, {
         where: { id: userId },
       });
@@ -1463,7 +1380,6 @@ export class TipsService {
         throw new NotFoundException("User not found or inactive");
       }
 
-      // 2. Validate user has TIPSTER role
       const userRoles = await queryRunner.manager
         .createQueryBuilder()
         .from("user_roles", "ur")
@@ -1475,11 +1391,10 @@ export class TipsService {
 
       if (!hasTipsterRole) {
         throw new ForbiddenException(
-          "Only tipsters can remove selections from tips"
+          "Only tipsters can remove selections from tips",
         );
       }
 
-      // 3. Get tip with tipster relation
       const tip = await queryRunner.manager.findOne(Tip, {
         where: { id: tipId },
         relations: ["tipster", "tipster.user"],
@@ -1489,35 +1404,30 @@ export class TipsService {
         throw new NotFoundException(`Tip not found: ${tipId}`);
       }
 
-      // 4. Verify tip belongs to the user
       if (tip.tipster.user?.id !== userId) {
         throw new ForbiddenException(
-          "You can only remove selections from your own tips"
+          "You can only remove selections from your own tips",
         );
       }
 
-      // 5. Verify tip is not published
       if (tip.isPublished) {
         throw new BadRequestException(
-          "Cannot remove selections: tip has already been published and is available for purchase"
+          "Cannot remove selections: tip has already been published and is available for purchase",
         );
       }
 
-      // 6. Get selection and verify it belongs to the tip
       const selection = await queryRunner.manager.findOne(TipSelection, {
         where: { id: selectionId, tip: { id: tipId } },
       });
 
       if (!selection) {
         throw new NotFoundException(
-          `Selection not found: ${selectionId} or does not belong to tip ${tipId}`
+          `Selection not found: ${selectionId} or does not belong to tip ${tipId}`,
         );
       }
 
-      // 7. Remove selection
       await queryRunner.manager.remove(TipSelection, selection);
 
-      // 8. Recalculate total odds and earliest match date
       const allSelections = await queryRunner.manager.find(TipSelection, {
         where: { tip: { id: tipId } },
         relations: ["match"],
@@ -1544,14 +1454,12 @@ export class TipsService {
 
       await queryRunner.manager.save(Tip, tip);
 
-      // 9. Commit transaction
       await queryRunner.commitTransaction();
 
       this.logger.log(
-        `Successfully removed selection ${selectionId} from tip ${tipId} by user ${userId}`
+        `Successfully removed selection ${selectionId} from tip ${tipId} by user ${userId}`,
       );
 
-      // 10. Load tip with relations for response
       const tipWithRelations = await this.tipRepository.findOne({
         where: { id: tipId },
         relations: ["tipster", "tipster.user"],
@@ -1559,7 +1467,7 @@ export class TipsService {
 
       if (!tipWithRelations) {
         throw new InternalServerErrorException(
-          "Failed to retrieve updated tip"
+          "Failed to retrieve updated tip",
         );
       }
 
@@ -1568,7 +1476,7 @@ export class TipsService {
       await queryRunner.rollbackTransaction();
       this.logger.error(
         `Error removing selection: ${error.message}`,
-        error.stack
+        error.stack,
       );
 
       if (
@@ -1585,19 +1493,6 @@ export class TipsService {
     }
   }
 
-  /**
-   * Publish a tip (make it available for purchase)
-   * Performs comprehensive validations before publishing:
-   * - User must be a tipster
-   * - Tip must belong to the user
-   * - Tip must not already be published
-   * - Tip must have at least one selection
-   * - All matches must be at least 12 hours before their start time
-   * - Price must pass min-max validation
-   * - Free tips must be enabled if price is 0
-   * - Title must be set and valid
-   * - All matches must be scheduled and not started
-   */
   async publishTip(tipId: string, userId: string): Promise<TipResponseDto> {
     this.logger.debug(`Publishing tip ${tipId} by user ${userId}`);
 
@@ -1606,7 +1501,6 @@ export class TipsService {
     await queryRunner.startTransaction();
 
     try {
-      // 1. Validate user exists and is active
       const user = await queryRunner.manager.findOne(User, {
         where: { id: userId },
       });
@@ -1615,7 +1509,6 @@ export class TipsService {
         throw new NotFoundException("User not found or inactive");
       }
 
-      // 2. Validate user has TIPSTER role
       const userRoles = await queryRunner.manager
         .createQueryBuilder()
         .from("user_roles", "ur")
@@ -1627,12 +1520,11 @@ export class TipsService {
 
       if (!hasTipsterRole) {
         this.logger.warn(
-          `User ${userId} attempted to publish tip without TIPSTER role`
+          `User ${userId} attempted to publish tip without TIPSTER role`,
         );
         throw new ForbiddenException("Only tipsters can publish tips");
       }
 
-      // 3. Get tip with tipster relation
       const tip = await queryRunner.manager.findOne(Tip, {
         where: { id: tipId },
         relations: ["tipster", "tipster.user"],
@@ -1642,30 +1534,26 @@ export class TipsService {
         throw new NotFoundException(`Tip not found: ${tipId}`);
       }
 
-      // 4. Verify tip belongs to the user
       if (tip.tipster.user?.id !== userId) {
         throw new ForbiddenException("You can only publish your own tips");
       }
 
-      // 5. Verify tip is not already published
       if (tip.isPublished) {
         throw new BadRequestException(
-          "Tip is already published and available for purchase"
+          "Tip is already published and available for purchase",
         );
       }
 
-      // 6. Validate title is set and not empty
       if (!tip.title || tip.title.trim().length === 0) {
         throw new BadRequestException("Tip title is required");
       }
 
       if (tip.title.trim().length > 255) {
         throw new BadRequestException(
-          "Tip title must not exceed 255 characters"
+          "Tip title must not exceed 255 characters",
         );
       }
 
-      // 7. Get app settings for validation
       const appSettings = await queryRunner.manager.findOne(AppSettings, {
         where: { isActive: true },
         order: { updatedAt: "DESC" },
@@ -1679,14 +1567,13 @@ export class TipsService {
         : TipsService.MAX_PRICE;
       const enableFreeTips = appSettings ? appSettings.enableFreeTips : true;
 
-      // 8. Validate price
       if (tip.price < 0) {
         throw new BadRequestException("Price must be at least 0");
       }
 
       if (tip.price > 0 && tip.price < minPrice) {
         throw new BadRequestException(
-          `Price must be at least ${minPrice} USD for paid tips, or 0 for free tips`
+          `Price must be at least ${minPrice} USD for paid tips, or 0 for free tips`,
         );
       }
 
@@ -1694,27 +1581,23 @@ export class TipsService {
         throw new BadRequestException(`Price must not exceed ${maxPrice} USD`);
       }
 
-      // 9. Validate free tips are enabled if price is 0
       if (tip.price === 0 && !enableFreeTips) {
         throw new BadRequestException(
-          "Free tips are currently disabled. Please set a price for your tip."
+          "Free tips are currently disabled. Please set a price for your tip.",
         );
       }
 
-      // 10. Get all selections for the tip
       const selections = await queryRunner.manager.find(TipSelection, {
         where: { tip: { id: tipId } },
         relations: ["match"],
       });
 
-      // 11. Validate at least one selection exists
       if (!selections || selections.length === 0) {
         throw new BadRequestException(
-          "Cannot publish tip: at least one selection is required"
+          "Cannot publish tip: at least one selection is required",
         );
       }
 
-      // 12. Validate all matches exist and are scheduled
       const matchIds = selections.map((s) => s.match.id);
       const uniqueMatchIds = [...new Set(matchIds)];
 
@@ -1726,33 +1609,29 @@ export class TipsService {
         const foundIds = new Set(matches.map((m) => m.id));
         const missingIds = uniqueMatchIds.filter((id) => !foundIds.has(id));
         throw new NotFoundException(
-          `Matches not found: ${missingIds.join(", ")}`
+          `Matches not found: ${missingIds.join(", ")}`,
         );
       }
 
-      // 13. Validate 12-hour rule: all matches must be at least 12 hours before their start time
       const now = new Date();
-      const twelveHoursInMs = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
+      const twelveHoursInMs = 12 * 60 * 60 * 1000;
 
       const invalidMatches: Array<{ matchId: string; matchDatetime: Date }> =
         [];
 
       for (const match of matches) {
-        // Check if match is scheduled
         if (match.status !== MatchStatusType.scheduled) {
           throw new BadRequestException(
-            `Cannot publish tip: match ${match.id} is not scheduled (status: ${match.status})`
+            `Cannot publish tip: match ${match.id} is not scheduled (status: ${match.status})`,
           );
         }
 
-        // Check if match has already started
         if (match.matchDatetime <= now) {
           throw new BadRequestException(
-            `Cannot publish tip: match ${match.id} has already started`
+            `Cannot publish tip: match ${match.id} has already started`,
           );
         }
 
-        // Check 12-hour rule: match must be at least 12 hours in the future
         const timeUntilMatch = match.matchDatetime.getTime() - now.getTime();
         if (timeUntilMatch < twelveHoursInMs) {
           invalidMatches.push({
@@ -1766,30 +1645,26 @@ export class TipsService {
         const matchDetails = invalidMatches
           .map(
             (m) =>
-              `match ${m.matchId} (starts at ${m.matchDatetime.toISOString()})`
+              `match ${m.matchId} (starts at ${m.matchDatetime.toISOString()})`,
           )
           .join(", ");
         throw new BadRequestException(
-          `Cannot publish tip: ${invalidMatches.length} match(es) are less than 12 hours before their start time: ${matchDetails}`
+          `Cannot publish tip: ${invalidMatches.length} match(es) are less than 12 hours before their start time: ${matchDetails}`,
         );
       }
 
-      // 14. Update tip to published status
       tip.isPublished = true;
       tip.publishedAt = new Date();
-      tip.status = TipStatusType.PENDING; // Ensure status is PENDING when published
+      tip.status = TipStatusType.PENDING;
 
-      // 15. Save updated tip
       const publishedTip = await queryRunner.manager.save(Tip, tip);
 
-      // 16. Commit transaction
       await queryRunner.commitTransaction();
 
       this.logger.log(
-        `Successfully published tip ${tipId} by user ${userId} with ${selections.length} selections`
+        `Successfully published tip ${tipId} by user ${userId} with ${selections.length} selections`,
       );
 
-      // 17. Load tip with relations for response
       const tipWithRelations = await this.tipRepository.findOne({
         where: { id: publishedTip.id },
         relations: ["tipster", "tipster.user"],
@@ -1797,7 +1672,7 @@ export class TipsService {
 
       if (!tipWithRelations) {
         throw new InternalServerErrorException(
-          "Failed to retrieve published tip"
+          "Failed to retrieve published tip",
         );
       }
 
@@ -1806,7 +1681,6 @@ export class TipsService {
       await queryRunner.rollbackTransaction();
       this.logger.error(`Error publishing tip: ${error.message}`, error.stack);
 
-      // Re-throw known exceptions
       if (
         error instanceof BadRequestException ||
         error instanceof ForbiddenException ||
@@ -1815,10 +1689,113 @@ export class TipsService {
         throw error;
       }
 
-      // Wrap unknown errors
       throw new InternalServerErrorException("Failed to publish tip");
     } finally {
       await queryRunner.release();
     }
+  }
+
+  async getTipDetails(
+    tipId: string,
+    userId: string,
+  ): Promise<TipEditingResponseDto> {
+    this.logger.debug(`Getting tip details for tip ${tipId} by user ${userId}`);
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user || !user.isActive) {
+      throw new NotFoundException("User not found or inactive");
+    }
+
+    const tip = await this.tipRepository.findOne({
+      where: { id: tipId },
+      relations: ["tipster", "tipster.user"],
+    });
+
+    if (!tip) {
+      throw new NotFoundException(`Tip not found: ${tipId}`);
+    }
+
+    const isCreator = tip.tipster?.user?.id === userId;
+
+    let hasPurchased = false;
+    if (!isCreator) {
+      const purchase = await this.purchaseRepository.findOne({
+        where: {
+          tip: { id: tipId },
+          buyer: { id: userId },
+          status: PurchaseStatusType.COMPLETED,
+        },
+      });
+      hasPurchased = !!purchase;
+    }
+
+    if (!isCreator && !hasPurchased) {
+      if (tip.price === 0 && tip.isPublished) {
+      } else {
+        throw new ForbiddenException(
+          "You do not have access to this tip. Please purchase it to view details.",
+        );
+      }
+    }
+
+    const selections = await this.tipSelectionRepository.find({
+      where: { tip: { id: tipId } },
+      relations: ["match"],
+    });
+
+    const response = new TipEditingResponseDto();
+    response.id = tip.id;
+    response.title = tip.title;
+    response.description = tip.description || null;
+    response.price = parseFloat(tip.price.toString());
+    response.totalOdds = tip.totalOdds
+      ? parseFloat(tip.totalOdds.toString())
+      : null;
+    response.status = tip.status;
+    response.purchasesCount = tip.purchasesCount;
+    response.earliestMatchDate = tip.earliestMatchDate || null;
+    response.createdAt = tip.createdAt;
+
+    if (tip.tipster) {
+      const tipsterInfo = new TipsterBasicInfoDto();
+      tipsterInfo.id = tip.tipster.id;
+      tipsterInfo.rating = parseFloat(tip.tipster.rating.toString());
+      tipsterInfo.successRate = parseFloat(tip.tipster.successRate.toString());
+      tipsterInfo.isVerified = tip.tipster.isVerified;
+      tipsterInfo.totalTips = tip.tipster.totalTips;
+
+      if (tip.tipster.user) {
+        tipsterInfo.displayName =
+          tip.tipster.user.displayName ||
+          (tip.tipster.user.firstName || tip.tipster.user.lastName
+            ? `${tip.tipster.user.firstName || ""} ${tip.tipster.user.lastName || ""}`.trim()
+            : undefined);
+        tipsterInfo.avatarUrl = tip.tipster.user.avatarUrl || null;
+      }
+
+      response.tipster = tipsterInfo;
+    }
+
+    response.selections = selections.map((sel) => {
+      const selectionDto = new TipSelectionEditingDto();
+      selectionDto.id = sel.id;
+      selectionDto.matchId = sel.match.id;
+      selectionDto.predictionType = sel.predictionType;
+      selectionDto.predictionValue = sel.predictionValue;
+      selectionDto.odds = sel.odds
+        ? parseFloat(sel.odds.toString())
+        : undefined;
+      selectionDto.isVoid = sel.isVoid;
+      return selectionDto;
+    });
+
+    this.logger.log(
+      `Successfully retrieved tip details for tip ${tipId} by user ${userId} (creator: ${isCreator}, purchased: ${hasPurchased})`,
+    );
+
+    return response;
   }
 }
