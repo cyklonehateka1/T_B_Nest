@@ -95,8 +95,8 @@ export class MatchData {
   @Column({ name: "last_synced_at", type: "timestamptz", nullable: true })
   lastSyncedAt?: Date;
 
-  @Column({ type: "text", nullable: true })
-  odds?: string;
+  @Column({ type: "jsonb", nullable: true })
+  odds?: Record<string, any>;
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;

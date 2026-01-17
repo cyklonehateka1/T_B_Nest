@@ -415,15 +415,15 @@ export class MatchSyncService {
 
       // Parse and set odds from bookmakers (prefer betway, fallback to others)
       // Always update odds even if match exists
-      const oddsJsonString = this.extractOddsFromMatchData(
+      const oddsObject = this.extractOddsFromMatchData(
         matchData,
         homeTeamName,
         awayTeamName
       );
-      if (oddsJsonString && oddsJsonString.trim() !== "") {
-        match.odds = oddsJsonString;
+      if (oddsObject && Object.keys(oddsObject).length > 0) {
+        match.odds = oddsObject;
         this.logger.debug(
-          `Extracted odds for match ${externalId}: ${oddsJsonString}`
+          `Extracted odds for match ${externalId}: ${JSON.stringify(oddsObject)}`
         );
       } else {
         this.logger.debug(`No odds found for match ${externalId}`);
@@ -598,7 +598,7 @@ export class MatchSyncService {
     matchData: any,
     homeTeamName: string,
     awayTeamName: string
-  ): string | null {
+  ): Record<string, any> | null {
     try {
       const bookmakers = matchData.bookmakers;
       if (!Array.isArray(bookmakers) || bookmakers.length === 0) {
@@ -703,8 +703,8 @@ export class MatchSyncService {
 
       oddsMap.bookmaker = bookmakerName;
 
-      // Convert to stringified JSON
-      return JSON.stringify(oddsMap);
+      // Return as object (will be stored as JSONB in database)
+      return oddsMap;
     } catch (error: any) {
       this.logger.warn(
         `Error extracting odds from match data: ${error.message}`,

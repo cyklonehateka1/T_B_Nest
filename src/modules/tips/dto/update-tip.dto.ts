@@ -1,31 +1,28 @@
 import { ApiProperty } from "@nestjs/swagger";
 import {
   IsString,
-  IsNotEmpty,
   IsOptional,
   IsNumber,
   Min,
-  IsArray,
-  ValidateNested,
   MaxLength,
-  IsNotEmptyObject,
 } from "class-validator";
-import { Type } from "class-transformer";
-import { CreateTipSelectionDto } from "./create-tip-selection.dto";
 
 /**
- * DTO for creating a tip
+ * DTO for updating a tip
+ * Only allows updating title, description, and price
+ * Tip can only be updated if it's not published (isPublished = false)
  */
-export class CreateTipDto {
+export class UpdateTipDto {
   @ApiProperty({
     description: "Title of the tip",
     example: "EPL Weekend Acca",
     maxLength: 255,
+    required: false,
   })
   @IsString({ message: "Title must be a string" })
-  @IsNotEmpty({ message: "Title is required" })
+  @IsOptional()
   @MaxLength(255, { message: "Title must not exceed 255 characters" })
-  title: string;
+  title?: string;
 
   @ApiProperty({
     description: "Description of the tip (optional)",
@@ -40,20 +37,10 @@ export class CreateTipDto {
     description: "Price of the tip (minimum 0, free tips have price 0)",
     example: 10.5,
     minimum: 0,
-    default: 0,
-  })
-  @IsNumber({}, { message: "Price must be a number" })
-  @Min(0, { message: "Price must be at least 0" })
-  price: number;
-
-  @ApiProperty({
-    description: "Array of match selections/predictions for this tip (optional for draft tips)",
-    type: [CreateTipSelectionDto],
     required: false,
   })
-  @IsArray({ message: "Selections must be an array" })
+  @IsNumber({}, { message: "Price must be a number" })
   @IsOptional()
-  @ValidateNested({ each: true })
-  @Type(() => CreateTipSelectionDto)
-  selections?: CreateTipSelectionDto[];
+  @Min(0, { message: "Price must be at least 0" })
+  price?: number;
 }

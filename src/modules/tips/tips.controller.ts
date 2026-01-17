@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query, Body, Request, UseGuards } from "@nestjs/common";
+import { Controller, Get, Post, Patch, Delete, Query, Body, Request, UseGuards, Param } from "@nestjs/common";
 import {
   ApiTags,
   ApiOperation,
@@ -11,6 +11,8 @@ import { TipsService } from "./tips.service";
 import { TipsPageResponseDto } from "./dto/tips-page-response.dto";
 import { TipResponseDto } from "./dto/tip-response.dto";
 import { CreateTipDto } from "./dto/create-tip.dto";
+import { UpdateTipDto } from "./dto/update-tip.dto";
+import { AddSelectionDto } from "./dto/add-selection.dto";
 import { ApiResponse as ApiResponseClass } from "../../common/dto/api-response.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../modules/auth/guards/roles.guard";
@@ -307,5 +309,245 @@ export class TipsController {
     const tip = await this.tipsService.createTip(createTipDto, userId);
 
     return ApiResponseClass.success(tip, "Tip created successfully");
+  }
+
+  @Patch(":id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRoleType.TIPSTER)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Update a tip",
+    description:
+      "Update tip title, description, or price. Only allowed if the tip is not published (isPublished = false). Only the tip owner can update it.",
+  })
+  @ApiBody({
+    type: UpdateTipDto,
+    description: "Tip update data",
+    examples: {
+      example1: {
+        value: {
+          title: "Updated EPL Weekend Acca",
+          description: "Updated description",
+          price: 15.0,
+        },
+        summary: "Update all fields",
+      },
+      example2: {
+        value: {
+          price: 0,
+        },
+        summary: "Update only price to make it free",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Tip updated successfully",
+    type: TipResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Bad request - tip is published or invalid data",
+    schema: {
+      example: {
+        statusCode: 400,
+        message: "Cannot update tip: tip has already been published and is available for purchase",
+        success: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 403,
+    description: "Forbidden - user is not the tip owner or not a tipster",
+    schema: {
+      example: {
+        statusCode: 403,
+        message: "You can only update your own tips",
+        success: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Not found - tip not found",
+    schema: {
+      example: {
+        statusCode: 404,
+        message: "Tip not found: 550e8400-e29b-41d4-a716-446655440000",
+        success: false,
+      },
+    },
+  })
+  async updateTip(
+    @Param("id") tipId: string,
+    @Body() updateTipDto: UpdateTipDto,
+    @Request() req: any
+  ): Promise<ApiResponseClass<TipResponseDto>> {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new Error("User ID not found in request");
+    }
+
+    const tip = await this.tipsService.updateTip(tipId, updateTipDto, userId);
+
+    return ApiResponseClass.success(tip, "Tip updated successfully");
+  }
+
+  @Post(":id/selections")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRoleType.TIPSTER)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Add or update a selection to a tip",
+    description:
+      "Add a new selection or update an existing one for a tip. Only allowed if the tip is not published. Handles mutual exclusivity between match_result, double_chance, and handicap. Only the tip owner can add selections.",
+  })
+  @ApiBody({
+    type: AddSelectionDto,
+    description: "Selection data",
+    examples: {
+      example1: {
+        value: {
+          matchId: "550e8400-e29b-41d4-a716-446655440000",
+          prediction: "home_win",
+          odds: 2.5,
+        },
+        summary: "Match result selection",
+      },
+      example2: {
+        value: {
+          matchId: "550e8400-e29b-41d4-a716-446655440000",
+          prediction: "over_2.5",
+          odds: 1.8,
+        },
+        summary: "Over/under selection",
+      },
+      example3: {
+        value: {
+          matchId: "550e8400-e29b-41d4-a716-446655440000",
+          prediction: "handicap",
+          odds: 2.2,
+          betLine: -1.5,
+        },
+        summary: "Handicap selection",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Selection added successfully",
+    type: TipResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Bad request - tip is published, invalid data, or max selections reached",
+    schema: {
+      example: {
+        statusCode: 400,
+        message: "Cannot add selections: tip has already been published and is available for purchase",
+        success: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 403,
+    description: "Forbidden - user is not the tip owner or not a tipster",
+    schema: {
+      example: {
+        statusCode: 403,
+        message: "You can only add selections to your own tips",
+        success: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Not found - tip or match not found",
+    schema: {
+      example: {
+        statusCode: 404,
+        message: "Tip not found: 550e8400-e29b-41d4-a716-446655440000",
+        success: false,
+      },
+    },
+  })
+  async addSelection(
+    @Param("id") tipId: string,
+    @Body() addSelectionDto: AddSelectionDto,
+    @Request() req: any
+  ): Promise<ApiResponseClass<TipResponseDto>> {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new Error("User ID not found in request");
+    }
+
+    const tip = await this.tipsService.addSelection(tipId, addSelectionDto, userId);
+
+    return ApiResponseClass.success(tip, "Selection added successfully");
+  }
+
+  @Delete(":id/selections/:selectionId")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRoleType.TIPSTER)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Remove a selection from a tip",
+    description:
+      "Remove a selection from a tip. Only allowed if the tip is not published. Only the tip owner can remove selections.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Selection removed successfully",
+    type: TipResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Bad request - tip is published",
+    schema: {
+      example: {
+        statusCode: 400,
+        message: "Cannot remove selections: tip has already been published and is available for purchase",
+        success: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 403,
+    description: "Forbidden - user is not the tip owner or not a tipster",
+    schema: {
+      example: {
+        statusCode: 403,
+        message: "You can only remove selections from your own tips",
+        success: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Not found - tip or selection not found",
+    schema: {
+      example: {
+        statusCode: 404,
+        message: "Selection not found: 550e8400-e29b-41d4-a716-446655440000",
+        success: false,
+      },
+    },
+  })
+  async removeSelection(
+    @Param("id") tipId: string,
+    @Param("selectionId") selectionId: string,
+    @Request() req: any
+  ): Promise<ApiResponseClass<TipResponseDto>> {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new Error("User ID not found in request");
+    }
+
+    const tip = await this.tipsService.removeSelection(tipId, selectionId, userId);
+
+    return ApiResponseClass.success(tip, "Selection removed successfully");
   }
 }
