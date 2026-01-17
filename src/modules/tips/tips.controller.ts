@@ -383,10 +383,7 @@ export class TipsController {
 
     const tip = await this.tipsService.getTipForEditing(tipId, userId);
 
-    return ApiResponseClass.success(
-      tip,
-      "Tip details retrieved successfully"
-    );
+    return ApiResponseClass.success(tip, "Tip details retrieved successfully");
   }
 
   @Patch(":id")
@@ -639,5 +636,141 @@ export class TipsController {
     );
 
     return ApiResponseClass.success(tip, "Selection removed successfully");
+  }
+
+  @Post(":id/publish")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRoleType.TIPSTER)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Publish a tip (make it available for purchase)",
+    description:
+      "Publish a tip after setting the price, title, and making tip selections. This endpoint performs comprehensive validations including: user must be a tipster, tip must belong to the user, tip must not already be published, at least one selection is required, all matches must be at least 12 hours before their start time, price must pass min-max validation, free tips must be enabled if price is 0, and all matches must be scheduled and not started.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Tip published successfully",
+    type: TipResponseDto,
+    schema: {
+      example: {
+        success: true,
+        data: {
+          id: "550e8400-e29b-41d4-a716-446655440000",
+          title: "EPL Weekend Acca",
+          description: "Top picks for this weekend's Premier League matches",
+          price: 10.5,
+          totalOdds: 4.5,
+          status: "PENDING",
+          purchasesCount: 0,
+          publishedAt: "2024-01-15T10:00:00Z",
+          earliestMatchDate: "2024-01-15T15:00:00Z",
+          createdAt: "2024-01-10T08:00:00Z",
+          tipster: {
+            id: "550e8400-e29b-41d4-a716-446655440001",
+            displayName: "John Doe",
+            avatarUrl: "https://example.com/avatar.png",
+            isVerified: true,
+            rating: 4.5,
+            successRate: 75.5,
+            totalTips: 150,
+          },
+        },
+        message: "Tip published successfully",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      "Bad request - validation failed (e.g., tip already published, no selections, matches too soon, invalid price)",
+    schema: {
+      examples: {
+        alreadyPublished: {
+          value: {
+            statusCode: 400,
+            message: "Tip is already published and available for purchase",
+            success: false,
+          },
+        },
+        noSelections: {
+          value: {
+            statusCode: 400,
+            message: "Cannot publish tip: at least one selection is required",
+            success: false,
+          },
+        },
+        matchesTooSoon: {
+          value: {
+            statusCode: 400,
+            message:
+              "Cannot publish tip: 2 match(es) are less than 12 hours before their start time: match 550e8400-e29b-41d4-a716-446655440000 (starts at 2024-01-15T10:00:00Z), match 550e8400-e29b-41d4-a716-446655440001 (starts at 2024-01-15T11:00:00Z)",
+            success: false,
+          },
+        },
+        invalidPrice: {
+          value: {
+            statusCode: 400,
+            message:
+              "Price must be at least 1.0 USD for paid tips, or 0 for free tips",
+            success: false,
+          },
+        },
+        freeTipsDisabled: {
+          value: {
+            statusCode: 400,
+            message:
+              "Free tips are currently disabled. Please set a price for your tip.",
+            success: false,
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 403,
+    description: "Forbidden - user is not the tip owner or not a tipster",
+    schema: {
+      example: {
+        statusCode: 403,
+        message: "You can only publish your own tips",
+        success: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Not found - tip or matches not found",
+    schema: {
+      example: {
+        statusCode: 404,
+        message: "Tip not found: 550e8400-e29b-41d4-a716-446655440000",
+        success: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Unauthorized - invalid or missing JWT token",
+    schema: {
+      example: {
+        statusCode: 401,
+        message: "Unauthorized",
+        success: false,
+      },
+    },
+  })
+  async publishTip(
+    @Param("id") tipId: string,
+    @Request() req: any,
+  ): Promise<ApiResponseClass<TipResponseDto>> {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new Error("User ID not found in request");
+    }
+
+    const tip = await this.tipsService.publishTip(tipId, userId);
+
+    return ApiResponseClass.success(tip, "Tip published successfully");
   }
 }

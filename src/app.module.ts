@@ -11,6 +11,7 @@ import { LeaguesModule } from "./modules/leagues/leagues.module";
 import { MatchesModule } from "./modules/matches/matches.module";
 import { MatchSyncModule } from "./modules/match-sync/match-sync.module";
 import { TipsModule } from "./modules/tips/tips.module";
+import { AppSettingsModule } from "./modules/app-settings/app-settings.module";
 import { AuditLog } from "./common/entities/audit-log.entity";
 import { UserInvite } from "./common/entities/user-invite.entity";
 import { TemporarySession } from "./common/entities/temporary-session.entity";
@@ -44,6 +45,7 @@ import { PersonalPredictionSelection } from "./common/entities/personal-predicti
 import { TipsterApplication } from "./common/entities/tipster-application.entity";
 import { UserRole } from "./common/entities/user-role.entity";
 import { PlatformSetting } from "./common/entities/platform-setting.entity";
+import { AppSettings } from "./common/entities/app-settings.entity";
 import { RateLimitingService } from "./common/services/rate-limiting.service";
 import { EnvironmentValidationService } from "./common/services/environment-validation.service";
 
@@ -106,6 +108,7 @@ import { EnvironmentValidationService } from "./common/services/environment-vali
             TipsterApplication,
             UserRole,
             PlatformSetting,
+            AppSettings,
           ],
         };
       },
@@ -117,6 +120,7 @@ import { EnvironmentValidationService } from "./common/services/environment-vali
     MatchesModule,
     MatchSyncModule,
     TipsModule,
+    AppSettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService, RateLimitingService, EnvironmentValidationService],

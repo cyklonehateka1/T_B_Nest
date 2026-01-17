@@ -7,10 +7,18 @@ import { Tipster } from "../../common/entities/tipster.entity";
 import { TipSelection } from "../../common/entities/tip-selection.entity";
 import { MatchData } from "../../common/entities/match-data.entity";
 import { User } from "../../common/entities/user.entity";
+import { AppSettings } from "../../common/entities/app-settings.entity";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Tip, Tipster, TipSelection, MatchData, User]),
+    TypeOrmModule.forFeature([
+      Tip,
+      Tipster,
+      TipSelection,
+      MatchData,
+      User,
+      AppSettings,
+    ]),
   ],
   controllers: [TipsController],
   providers: [TipsService],
