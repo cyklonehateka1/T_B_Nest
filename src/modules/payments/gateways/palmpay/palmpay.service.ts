@@ -560,14 +560,14 @@ export class PalmpayService extends PaymentGatewayBase {
       }
       const validatedWebhookData =
         this.paymentResponseValidatorService.validatePaymentResponse({
-          success: true,
-          transactionId:
-            webhookPayload.orderNo ||
-            payment.providerTransactionId ||
-            payment.orderNumber,
-          status: mappedStatus || (payment.status as string),
-          message: `Payment status: ${this.mapPalmpayStatus(webhookPayload.orderStatus)} (Status: ${webhookPayload.status}, Order Status: ${webhookPayload.orderStatus})`,
-          data: webhookPayload,
+            success: true,
+            transactionId:
+              webhookPayload.orderNo ||
+              payment.providerTransactionId ||
+              payment.orderNumber,
+            status: mappedStatus || (payment.status as string),
+            message: `Payment status: ${this.mapPalmpayStatus(webhookPayload.orderStatus)} (Status: ${webhookPayload.status}, Order Status: ${webhookPayload.orderStatus})`,
+            data: webhookPayload,
         });
       if (validatedWebhookData.transactionId) {
         payment.providerTransactionId = validatedWebhookData.transactionId;
@@ -619,15 +619,15 @@ export class PalmpayService extends PaymentGatewayBase {
         await queryRunner.manager.save(Payment, payment);
         // Update Purchase status based on payment status if purchase exists
         if (payment.purchase) {
-          if (webhookPayload.orderStatus === 2) {
+        if (webhookPayload.orderStatus === 2) {
             // Payment successful - mark purchase as completed
             payment.purchase.status = PurchaseStatusType.COMPLETED;
             await queryRunner.manager.save(Purchase, payment.purchase);
-          } else if (webhookPayload.orderStatus === 3) {
+        } else if (webhookPayload.orderStatus === 3) {
             // Payment failed
             payment.purchase.status = PurchaseStatusType.FAILED;
             await queryRunner.manager.save(Purchase, payment.purchase);
-          } else if (webhookPayload.orderStatus === 4) {
+        } else if (webhookPayload.orderStatus === 4) {
             // Payment cancelled
             payment.purchase.status = PurchaseStatusType.CANCELLED;
             await queryRunner.manager.save(Purchase, payment.purchase);
@@ -901,17 +901,17 @@ export class PalmpayService extends PaymentGatewayBase {
       }
       const validatedWebhookData =
         this.paymentResponseValidatorService.validatePaymentResponse({
-          success: true,
-          transactionId:
-            webhookPayload.orderNo ||
-            payment.providerTransactionId ||
-            payment.orderNumber,
-          status: mappedStatus || (payment.status as string),
-          message: `Virtual account payment status: ${this.mapPalmpayStatus(webhookPayload.orderStatus)}`,
-          data: {
-            ...webhookPayload,
-            amount: webhookPayload.orderAmount / 100,
-          },
+            success: true,
+            transactionId:
+              webhookPayload.orderNo ||
+              payment.providerTransactionId ||
+              payment.orderNumber,
+            status: mappedStatus || (payment.status as string),
+            message: `Virtual account payment status: ${this.mapPalmpayStatus(webhookPayload.orderStatus)}`,
+            data: {
+              ...webhookPayload,
+              amount: webhookPayload.orderAmount / 100,
+            },
         });
       if (validatedWebhookData.transactionId) {
         payment.providerTransactionId = validatedWebhookData.transactionId;
@@ -953,35 +953,35 @@ export class PalmpayService extends PaymentGatewayBase {
       }
       // Update Purchase status based on payment status if purchase exists
       if (payment.purchase) {
-        if (webhookPayload.orderStatus === 2) {
+      if (webhookPayload.orderStatus === 2) {
           // Payment successful - mark purchase as completed
           try {
             payment.purchase.status = PurchaseStatusType.COMPLETED;
             await this.purchaseRepository.save(payment.purchase);
           } catch (purchaseError) {
-            this.logger.error(
+          this.logger.error(
               `Failed to update purchase ${payment.purchase.id} to completed: ${purchaseError.message}`,
-            );
-          }
-        } else if (webhookPayload.orderStatus === 3) {
+          );
+        }
+      } else if (webhookPayload.orderStatus === 3) {
           // Payment failed
-          try {
+        try {
             payment.purchase.status = PurchaseStatusType.FAILED;
             await this.purchaseRepository.save(payment.purchase);
           } catch (purchaseError) {
-            this.logger.error(
+          this.logger.error(
               `Failed to mark purchase ${payment.purchase.id} as failed: ${purchaseError.message}`,
-            );
-          }
-        } else if (webhookPayload.orderStatus === 4) {
+          );
+        }
+      } else if (webhookPayload.orderStatus === 4) {
           // Payment cancelled
-          try {
+        try {
             payment.purchase.status = PurchaseStatusType.CANCELLED;
             await this.purchaseRepository.save(payment.purchase);
           } catch (purchaseError) {
-            this.logger.error(
+          this.logger.error(
               `Failed to mark purchase ${payment.purchase.id} as cancelled: ${purchaseError.message}`,
-            );
+          );
           }
         }
       }
