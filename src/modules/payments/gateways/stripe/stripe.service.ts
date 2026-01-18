@@ -7,7 +7,7 @@ import {
   PaymentStatusResponse,
   WebhookRequest,
   WebhookResponse,
-} from "./payment-gateway-base";
+} from "../payment-gateway-base";
 @Injectable()
 export class StripeService extends PaymentGatewayBase {
   protected logger = new Logger(StripeService.name);

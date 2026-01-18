@@ -47,20 +47,20 @@ export class MatchesController {
               id: "683bdda2-b79f-44a0-a2d5-569e27c09583",
               externalId: "39",
               name: "Premier League",
-              logoUrl: "https:
+              logoUrl: "https://tipster.bet/logos/premier-league.png",
               country: "England",
             },
             homeTeam: {
               id: "550e8400-e29b-41d4-a716-446655440001",
               name: "Manchester United",
               shortName: "Man Utd",
-              logoUrl: "https:
+              logoUrl: "https://tipster.bet/logos/manchester-united.png",
             },
             awayTeam: {
               id: "550e8400-e29b-41d4-a716-446655440002",
               name: "Liverpool",
               shortName: "Liverpool",
-              logoUrl: "https:
+              logoUrl: "https://tipster.bet/logos/liverpool.png",
             },
             matchDate: "2024-01-15T15:00:00Z",
             status: "scheduled",

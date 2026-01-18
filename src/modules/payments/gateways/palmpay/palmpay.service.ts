@@ -17,17 +17,18 @@ import {
   PaymentStatusResponse,
   WebhookRequest,
   WebhookResponse,
-} from "./payment-gateway-base";
+} from "../payment-gateway-base";
 import {
   MobileMoneyPaymentData,
   isMobileMoneyPaymentData,
 } from "../order-creation.service";
-import { PaymentResponseValidatorService } from "../../common/services/payment-response-validator.service";
-import { EmailService } from "../../email/email.service";
-import { WebhookService } from "../../common/services/webhook.service";
-import { Payment } from "../../common/entities/payment.entity";
-import { Order } from "../../common/entities/order.entity";
-import { OrderService } from "../orders.service";
+import { PaymentResponseValidatorService } from "../../../../common/services/payment-response-validator.service";
+import { EmailService } from "../../../email/email.service";
+import { WebhookService } from "../../../../common/services/webhook.service";
+import { Payment } from "../../../../common/entities/payment.entity";
+import { Purchase } from "../../../../common/entities/purchase.entity";
+import { PurchaseStatusType } from "../../../../common/enums/purchase-status-type.enum";
+
 export interface PalmpayCreateOrderRequest {
   requestTime: number;
   version: string;
@@ -139,9 +140,8 @@ export class PalmpayService extends PaymentGatewayBase {
     private readonly configService: ConfigService,
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
-    @InjectRepository(Order)
-    private readonly orderRepository: Repository<Order>,
-    private readonly orderService: OrderService,
+    @InjectRepository(Purchase)
+    private readonly purchaseRepository: Repository<Purchase>,
     private readonly paymentResponseValidatorService: PaymentResponseValidatorService,
     private readonly emailService: EmailService,
     private readonly webhookService: WebhookService,
@@ -221,7 +221,7 @@ export class PalmpayService extends PaymentGatewayBase {
     try {
       const payment = await this.paymentRepository.findOne({
         where: { providerTransactionId: request.transactionId },
-        relations: ["order"],
+        relations: ["purchase"],
       });
       if (!payment) {
         return {
@@ -232,14 +232,14 @@ export class PalmpayService extends PaymentGatewayBase {
           errors: ["Payment not found"],
         };
       }
-      if (!payment.order) {
-        this.logger.error(`Order not found for payment ${payment.id}`);
+      if (!payment.orderNumber) {
+        this.logger.error(`Order number not found for payment ${payment.id}`);
         return {
           success: false,
           status: "error",
           transactionId: request.transactionId,
-          message: "Order not found for payment",
-          errors: ["Order not found"],
+          message: "Order number not found for payment",
+          errors: ["Order number not found"],
         };
       }
       const generateNonce = (length = 32): string => {
@@ -257,7 +257,7 @@ export class PalmpayService extends PaymentGatewayBase {
         requestTime: Date.now(),
         version: "V1.1",
         nonceStr: generateNonce(),
-        orderId: payment.order.orderNumber,
+        orderId: payment.orderNumber,
         orderNo: request.transactionId,
         currency: payment.currency,
       };
@@ -475,12 +475,12 @@ export class PalmpayService extends PaymentGatewayBase {
       const orderId = webhookPayload.orderId;
       let payment = await this.paymentRepository.findOne({
         where: { orderNumber: orderId },
-        relations: ["order", "order.orderItems"],
+        relations: ["purchase"],
       });
       if (!payment && webhookPayload.orderNo) {
         const paymentByProviderId = await this.paymentRepository.findOne({
           where: { providerTransactionId: webhookPayload.orderNo },
-          relations: ["order", "order.orderItems"],
+          relations: ["purchase"],
         });
         if (paymentByProviderId) {
           payment = paymentByProviderId;
@@ -559,37 +559,27 @@ export class PalmpayService extends PaymentGatewayBase {
         payment.providerTransactionId = webhookPayload.orderNo;
       }
       const validatedWebhookData =
-        this.paymentResponseValidatorService.validatePaymentResponse(
-          {
-            success: true,
-            transactionId:
-              webhookPayload.orderNo ||
-              payment.providerTransactionId ||
-              payment.orderNumber,
-            status: mappedStatus || (payment.status as string),
-            message: `Payment status: ${this.mapPalmpayStatus(webhookPayload.orderStatus)} (Status: ${webhookPayload.status}, Order Status: ${webhookPayload.orderStatus})`,
-            data: webhookPayload,
-          },
-          "palmpay",
-          payment.providerTransactionId,
-        );
+        this.paymentResponseValidatorService.validatePaymentResponse({
+          success: true,
+          transactionId:
+            webhookPayload.orderNo ||
+            payment.providerTransactionId ||
+            payment.orderNumber,
+          status: mappedStatus || (payment.status as string),
+          message: `Payment status: ${this.mapPalmpayStatus(webhookPayload.orderStatus)} (Status: ${webhookPayload.status}, Order Status: ${webhookPayload.orderStatus})`,
+          data: webhookPayload,
+        });
       if (validatedWebhookData.transactionId) {
         payment.providerTransactionId = validatedWebhookData.transactionId;
       }
       if (mappedStatus) {
         payment.providerStatus = mappedStatus as any;
       }
-      const encryptedWebhookData =
-        this.paymentResponseValidatorService.encryptResponseData(
-          validatedWebhookData,
-        );
       payment.responseData = {
         success: validatedWebhookData.success,
         message: validatedWebhookData.message,
         data: validatedWebhookData.data,
         transactionId: validatedWebhookData.transactionId,
-        encryptedData: encryptedWebhookData,
-        webhookHash,
       };
       if (webhookPayload.orderStatus !== undefined) {
         const newStatus = this.mapPalmpayStatus(webhookPayload.orderStatus);
@@ -627,18 +617,21 @@ export class PalmpayService extends PaymentGatewayBase {
       await queryRunner.startTransaction();
       try {
         await queryRunner.manager.save(Payment, payment);
-        if (webhookPayload.orderStatus === 2) {
-          payment.order.paidAmount = payment.amount;
-          payment.order.paidAt = webhookPayload.completeTime
-            ? new Date(webhookPayload.completeTime)
-            : new Date();
-          await queryRunner.manager.save(Order, payment.order);
-        } else if (webhookPayload.orderStatus === 3) {
-          payment.order.status = "failed" as any;
-          await queryRunner.manager.save(Order, payment.order);
-        } else if (webhookPayload.orderStatus === 4) {
-          payment.order.status = "cancelled" as any;
-          await queryRunner.manager.save(Order, payment.order);
+        // Update Purchase status based on payment status if purchase exists
+        if (payment.purchase) {
+          if (webhookPayload.orderStatus === 2) {
+            // Payment successful - mark purchase as completed
+            payment.purchase.status = PurchaseStatusType.COMPLETED;
+            await queryRunner.manager.save(Purchase, payment.purchase);
+          } else if (webhookPayload.orderStatus === 3) {
+            // Payment failed
+            payment.purchase.status = PurchaseStatusType.FAILED;
+            await queryRunner.manager.save(Purchase, payment.purchase);
+          } else if (webhookPayload.orderStatus === 4) {
+            // Payment cancelled
+            payment.purchase.status = PurchaseStatusType.CANCELLED;
+            await queryRunner.manager.save(Purchase, payment.purchase);
+          }
         }
         await queryRunner.commitTransaction();
       } catch (transactionError) {
@@ -877,7 +870,7 @@ export class PalmpayService extends PaymentGatewayBase {
       }
       const payment = await this.paymentRepository.findOne({
         where: { providerTransactionId: webhookPayload.orderNo },
-        relations: ["order", "order.orderItems"],
+        relations: ["purchase"],
       });
       if (!payment) {
         this.logger.warn(
@@ -907,39 +900,30 @@ export class PalmpayService extends PaymentGatewayBase {
         payment.providerTransactionId = webhookPayload.orderNo;
       }
       const validatedWebhookData =
-        this.paymentResponseValidatorService.validatePaymentResponse(
-          {
-            success: true,
-            transactionId:
-              webhookPayload.orderNo ||
-              payment.providerTransactionId ||
-              payment.orderNumber,
-            status: mappedStatus || (payment.status as string),
-            message: `Virtual account payment status: ${this.mapPalmpayStatus(webhookPayload.orderStatus)}`,
-            data: {
-              ...webhookPayload,
-              amount: webhookPayload.orderAmount / 100,
-            },
+        this.paymentResponseValidatorService.validatePaymentResponse({
+          success: true,
+          transactionId:
+            webhookPayload.orderNo ||
+            payment.providerTransactionId ||
+            payment.orderNumber,
+          status: mappedStatus || (payment.status as string),
+          message: `Virtual account payment status: ${this.mapPalmpayStatus(webhookPayload.orderStatus)}`,
+          data: {
+            ...webhookPayload,
+            amount: webhookPayload.orderAmount / 100,
           },
-          "palmpay",
-          payment.providerTransactionId,
-        );
+        });
       if (validatedWebhookData.transactionId) {
         payment.providerTransactionId = validatedWebhookData.transactionId;
       }
       if (mappedStatus) {
         payment.providerStatus = mappedStatus as any;
       }
-      const encryptedWebhookData =
-        this.paymentResponseValidatorService.encryptResponseData(
-          validatedWebhookData,
-        );
       payment.responseData = {
         success: validatedWebhookData.success,
         message: validatedWebhookData.message,
         data: validatedWebhookData.data,
         transactionId: validatedWebhookData.transactionId,
-        encryptedData: encryptedWebhookData,
       };
       if (webhookPayload.orderStatus !== undefined) {
         const status = this.mapPalmpayStatus(webhookPayload.orderStatus);
@@ -967,34 +951,38 @@ export class PalmpayService extends PaymentGatewayBase {
           );
         }
       }
-      if (webhookPayload.orderStatus === 2) {
-        try {
-          const amountInCurrency = webhookPayload.orderAmount / 100;
-          payment.order.paidAmount = amountInCurrency;
-          payment.order.paidAt = new Date(webhookPayload.updateTime);
-          await this.orderRepository.save(payment.order);
-        } catch (orderError) {
-          this.logger.error(
-            `Failed to update order payment fields for ${payment.order.orderNumber}: ${orderError.message}`,
-          );
-        }
-      } else if (webhookPayload.orderStatus === 3) {
-        try {
-          payment.order.status = "failed" as any;
-          await this.orderRepository.save(payment.order);
-        } catch (orderError) {
-          this.logger.error(
-            `Failed to mark order ${payment.order.orderNumber} as failed: ${orderError.message}`,
-          );
-        }
-      } else if (webhookPayload.orderStatus === 4) {
-        try {
-          payment.order.status = "cancelled" as any;
-          await this.orderRepository.save(payment.order);
-        } catch (orderError) {
-          this.logger.error(
-            `Failed to mark order ${payment.order.orderNumber} as cancelled: ${orderError.message}`,
-          );
+      // Update Purchase status based on payment status if purchase exists
+      if (payment.purchase) {
+        if (webhookPayload.orderStatus === 2) {
+          // Payment successful - mark purchase as completed
+          try {
+            payment.purchase.status = PurchaseStatusType.COMPLETED;
+            await this.purchaseRepository.save(payment.purchase);
+          } catch (purchaseError) {
+            this.logger.error(
+              `Failed to update purchase ${payment.purchase.id} to completed: ${purchaseError.message}`,
+            );
+          }
+        } else if (webhookPayload.orderStatus === 3) {
+          // Payment failed
+          try {
+            payment.purchase.status = PurchaseStatusType.FAILED;
+            await this.purchaseRepository.save(payment.purchase);
+          } catch (purchaseError) {
+            this.logger.error(
+              `Failed to mark purchase ${payment.purchase.id} as failed: ${purchaseError.message}`,
+            );
+          }
+        } else if (webhookPayload.orderStatus === 4) {
+          // Payment cancelled
+          try {
+            payment.purchase.status = PurchaseStatusType.CANCELLED;
+            await this.purchaseRepository.save(payment.purchase);
+          } catch (purchaseError) {
+            this.logger.error(
+              `Failed to mark purchase ${payment.purchase.id} as cancelled: ${purchaseError.message}`,
+            );
+          }
         }
       }
       return {
@@ -1155,38 +1143,45 @@ export class PalmpayService extends PaymentGatewayBase {
     webhookStatus: string,
   ): Promise<void> {
     try {
-      const order = await this.orderRepository.findOne({
-        where: { id: payment.orderId },
-        relations: ["customer", "orderItems"],
+      // Load purchase with buyer, tip, and payment method relationships
+      const purchase = await this.purchaseRepository.findOne({
+        where: { id: payment.purchaseId },
+        relations: ["buyer", "tip"],
       });
-      if (!order) {
-        this.logger.error(`Order not found for payment ${payment.id}`);
+      // Load payment with globalPaymentMethod if needed
+      const paymentWithMethod = await this.paymentRepository.findOne({
+        where: { id: payment.id },
+        relations: ["globalPaymentMethod"],
+      });
+      if (paymentWithMethod) {
+        payment.globalPaymentMethod = paymentWithMethod.globalPaymentMethod;
+      }
+      if (!purchase || !purchase.buyer) {
+        this.logger.error(`Purchase not found for payment ${payment.id}`);
         return;
       }
-      const customerEmail = order.customer.email;
-      const customerName =
-        order.customer.firstName && order.customer.lastName
-          ? `${order.customer.firstName} ${order.customer.lastName}`
-          : order.customer.firstName || "Customer";
+      const buyerEmail = purchase.buyer.email;
+      const buyerName =
+        purchase.buyer.firstName && purchase.buyer.lastName
+          ? `${purchase.buyer.firstName} ${purchase.buyer.lastName}`
+          : purchase.buyer.displayName || purchase.buyer.firstName || "User";
       if (webhookStatus === "completed" && !payment.emailNotificationSent) {
-        const paymentMethodName =
-          order.paymentMethodSnapshot?.name || "Payment";
-        await this.emailService.sendPaymentSuccessEmail(customerEmail, {
-          orderNumber: order.orderNumber || order.id,
+        await this.emailService.sendPaymentSuccessEmail(buyerEmail, {
+          orderNumber: payment.orderNumber || purchase.id,
           amount: Number(payment.amount),
-          paymentMethod: paymentMethodName,
-          customerName,
+          paymentMethod: payment.globalPaymentMethod?.name || "Payment",
+          customerName: buyerName,
         });
         await this.paymentRepository.update(payment.id, {
           emailNotificationSent: true,
           lastNotificationSentAt: new Date(),
         });
       } else if (webhookStatus === "failed" && !payment.emailNotificationSent) {
-        await this.emailService.sendPaymentFailureEmail(customerEmail, {
-          orderNumber: order.orderNumber || order.id,
+        await this.emailService.sendPaymentFailureEmail(buyerEmail, {
+          orderNumber: payment.orderNumber || purchase.id,
           amount: Number(payment.amount),
           errorMessage: "Payment was not successful. Please try again.",
-          customerName,
+          customerName: buyerName,
         });
         await this.paymentRepository.update(payment.id, {
           emailNotificationSent: true,
@@ -1194,7 +1189,7 @@ export class PalmpayService extends PaymentGatewayBase {
         });
       }
       if (webhookStatus === "completed" && !payment.webhookNotificationSent) {
-        await this.sendAdminWebhookForCompletedPayment(order, payment);
+        await this.sendAdminWebhookForCompletedPayment(purchase, payment);
       }
     } catch (error) {
       this.logger.error(
@@ -1203,31 +1198,34 @@ export class PalmpayService extends PaymentGatewayBase {
     }
   }
   private async sendAdminWebhookForCompletedPayment(
-    order: Order,
+    purchase: Purchase,
     payment: Payment,
   ): Promise<void> {
     try {
+      // Adapt purchase data to match OrderNotificationPayload structure
       const webhookPayload = {
-        orderId: order.id,
-        customerId: order.customer.id,
-        totalAmount: Number(order.totalAmount),
-        currency: order.localCurrencyCode!,
-        status: order.status,
+        orderId: purchase.id, // Using purchase.id as orderId
+        customerId: purchase.buyer.id,
+        totalAmount: Number(payment.amount),
+        currency: payment.currency,
+        status: purchase.status,
         paymentStatus: "paid",
-        items: order.orderItems.map((item) => ({
-          productId: item.originalProductId || "unknown",
-          productName: item.productName,
-          quantity: item.quantity,
-          unitPrice: Number(item.unitPrice),
-          totalPrice: Number(item.totalPrice),
-        })),
-        orderDate: order.createdAt.toISOString(),
-        customerEmail: order.customer.email,
+        items: [
+          {
+            productId: purchase.tip.id, // tip ID as product ID
+            productName: purchase.tip.title || "Tip/Prediction",
+            quantity: 1,
+            unitPrice: Number(payment.amount),
+            totalPrice: Number(payment.amount),
+          },
+        ],
+        orderDate: purchase.createdAt.toISOString(),
+        customerEmail: purchase.buyer.email,
         customerName:
-          order.customer.firstName && order.customer.lastName
-            ? `${order.customer.firstName} ${order.customer.lastName}`
-            : undefined,
-        notes: `Payment completed via webhook - Transaction: ${payment.providerTransactionId}`,
+          purchase.buyer.firstName && purchase.buyer.lastName
+            ? `${purchase.buyer.firstName} ${purchase.buyer.lastName}`
+            : purchase.buyer.displayName || undefined,
+        notes: `Purchase payment completed via webhook - Transaction: ${payment.providerTransactionId}, Tip: ${purchase.tip.id}`,
       };
       const success = await this.webhookService.retryWebhook(
         () => this.webhookService.sendOrderNotification(webhookPayload),
@@ -1243,7 +1241,7 @@ export class PalmpayService extends PaymentGatewayBase {
         this.logger.error(
           "Failed to send admin webhook for completed payment",
           {
-            orderId: order.id,
+            purchaseId: purchase.id,
           },
         );
       }

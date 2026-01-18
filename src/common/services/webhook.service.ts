@@ -41,7 +41,7 @@ export class WebhookService {
   constructor(private readonly configService: ConfigService) {
     this.adminBaseUrl =
       this.configService.get<string>("ADMIN_API_BASEURL") ||
-      "https:
+      "https://admin.tipster.bet";
     this.webhookSecret =
       this.configService.get<string>("WEBHOOK_SECRET") ||
       "default-webhook-secret";

@@ -26,6 +26,8 @@ import { TipEditingResponseDto } from "./dto/tip-editing-response.dto";
 import { CreateTipDto } from "./dto/create-tip.dto";
 import { UpdateTipDto } from "./dto/update-tip.dto";
 import { AddSelectionDto } from "./dto/add-selection.dto";
+import { PurchaseTipDto } from "./dto/purchase-tip.dto";
+import { PurchaseTipResponseDto } from "./dto/purchase-tip-response.dto";
 import { ApiResponse as ApiResponseClass } from "../../common/dto/api-response.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../modules/auth/guards/roles.guard";
@@ -882,5 +884,95 @@ export class TipsController {
     const tip = await this.tipsService.publishTip(tipId, userId);
 
     return ApiResponseClass.success(tip, "Tip published successfully");
+  }
+
+  @Post(":id/purchase")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Purchase a tip/prediction",
+    description:
+      "Purchase a published tip. Validates that both buyer and tipster have bank account details set (required for escrow). Initiates payment using the specified payment gateway (defaults to PalmPay).",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Purchase initiated successfully",
+    type: PurchaseTipResponseDto,
+    schema: {
+      example: {
+        success: true,
+        data: {
+          id: "550e8400-e29b-41d4-a716-446655440000",
+          tipId: "550e8400-e29b-41d4-a716-446655440001",
+          buyerId: "550e8400-e29b-41d4-a716-446655440002",
+          amount: 10.5,
+          status: "PENDING",
+          paymentReference: "TXN123456789",
+          paymentMethod: "mobile_money",
+          paymentGateway: "palmpay",
+          checkoutUrl: "https://payment.palmpay.com/checkout/...",
+          transactionId: "PALM123456789",
+          message: "Payment initiated successfully",
+        },
+        message: "Purchase initiated successfully",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      "Bad request - validation failed (e.g., missing bank details, tip not published, already purchased)",
+    schema: {
+      example: {
+        statusCode: 400,
+        message:
+          "Cannot purchase tip: Please set your bank account details first.",
+        success: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Unauthorized - invalid or missing JWT token",
+    schema: {
+      example: {
+        statusCode: 401,
+        message: "Unauthorized",
+        success: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Tip not found",
+    schema: {
+      example: {
+        statusCode: 404,
+        message: "Tip not found: 550e8400-e29b-41d4-a716-446655440000",
+        success: false,
+      },
+    },
+  })
+  async purchaseTip(
+    @Param("id") tipId: string,
+    @Body() purchaseDto: PurchaseTipDto,
+    @Request() req: any,
+  ): Promise<ApiResponseClass<PurchaseTipResponseDto>> {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new Error("User ID not found in request");
+    }
+
+    const purchase = await this.tipsService.purchaseTip(
+      tipId,
+      userId,
+      purchaseDto,
+    );
+
+    return ApiResponseClass.success(
+      purchase,
+      "Purchase initiated successfully",
+    );
   }
 }

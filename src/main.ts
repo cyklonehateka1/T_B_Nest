@@ -13,25 +13,16 @@ async function bootstrap() {
   const allowedOrigins =
     process.env.NODE_ENV === "production"
       ? [
-          "https:
-          "https:
-          "https:
-          "https:
-          "https:
-          "http:
-          "http:
-          "http:
+          "https://tipster.bet",
+          "https://www.tipster.bet",
+          "https://www.tipster.bet",
+          "https://www.tipster.bet",
           process.env.FRONTEND_URL,
         ].filter(Boolean)
       : [
-          "https:
-          "https:
-          "https:
-          "https:
-          "https:
-          "http:
-          "http:
-          "http:
+          "http://localhost:5173",
+          "http://localhost:5174",
+          "http://localhost:5175",
           process.env.FRONTEND_URL,
         ].filter(Boolean);
   app.enableCors({

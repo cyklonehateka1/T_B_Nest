@@ -38,6 +38,9 @@ import { PredictionType } from "../../common/enums/prediction-type.enum";
 import { AppSettings } from "../../common/entities/app-settings.entity";
 import { Purchase } from "../../common/entities/purchase.entity";
 import { PurchaseStatusType } from "../../common/enums/purchase-status-type.enum";
+import { PurchaseTipDto } from "./dto/purchase-tip.dto";
+import { PurchaseTipResponseDto } from "./dto/purchase-tip-response.dto";
+import { PaymentGatewayRegistryService } from "../payments/gateways/payment-gateway-registry.service";
 
 @Injectable()
 export class TipsService {
@@ -62,6 +65,7 @@ export class TipsService {
     @InjectRepository(Purchase)
     private readonly purchaseRepository: Repository<Purchase>,
     private readonly dataSource: DataSource,
+    private readonly paymentGatewayRegistry: PaymentGatewayRegistryService,
   ) {}
 
   async getTips(
@@ -1538,6 +1542,18 @@ export class TipsService {
         throw new ForbiddenException("You can only publish your own tips");
       }
 
+      // Check if tipster has bank account details set (required for receiving funds)
+      if (
+        !user.accountNumber ||
+        !user.accountName ||
+        !user.bankCode ||
+        !user.bankName
+      ) {
+        throw new BadRequestException(
+          "Cannot publish tip: Please set your bank account details first. You need account number, account name, bank code, and bank name to receive funds when your tips succeed.",
+        );
+      }
+
       if (tip.isPublished) {
         throw new BadRequestException(
           "Tip is already published and available for purchase",
@@ -1733,8 +1749,7 @@ export class TipsService {
     }
 
     if (!isCreator && !hasPurchased) {
-      if (tip.price === 0 && tip.isPublished) {
-      } else {
+      if (tip.price !== 0 || !tip.isPublished) {
         throw new ForbiddenException(
           "You do not have access to this tip. Please purchase it to view details.",
         );
@@ -1797,5 +1812,213 @@ export class TipsService {
     );
 
     return response;
+  }
+
+  async purchaseTip(
+    tipId: string,
+    userId: string,
+    purchaseDto: PurchaseTipDto,
+  ): Promise<PurchaseTipResponseDto> {
+    this.logger.debug(
+      `User ${userId} attempting to purchase tip ${tipId} with payment method ${purchaseDto.paymentMethod}`,
+    );
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Get buyer
+      const buyer = await queryRunner.manager.findOne(User, {
+        where: { id: userId },
+      });
+
+      if (!buyer || !buyer.isActive) {
+        throw new NotFoundException("User not found or inactive");
+      }
+
+      // Check if buyer has bank account details set (required for escrow refunds)
+      if (
+        !buyer.accountNumber ||
+        !buyer.accountName ||
+        !buyer.bankCode ||
+        !buyer.bankName
+      ) {
+        throw new BadRequestException(
+          "Cannot purchase tip: Please set your bank account details first. You need account number, account name, bank code, and bank name to receive refunds when tips fail.",
+        );
+      }
+
+      // Get tip with tipster
+      const tip = await queryRunner.manager.findOne(Tip, {
+        where: { id: tipId },
+        relations: ["tipster", "tipster.user"],
+      });
+
+      if (!tip) {
+        throw new NotFoundException(`Tip not found: ${tipId}`);
+      }
+
+      // Check if tip is published
+      if (!tip.isPublished) {
+        throw new BadRequestException(
+          "Cannot purchase tip: Tip is not published yet",
+        );
+      }
+
+      // Check if tipster has bank account details set (required for receiving funds)
+      if (
+        !tip.tipster.user ||
+        !tip.tipster.user.accountNumber ||
+        !tip.tipster.user.accountName ||
+        !tip.tipster.user.bankCode ||
+        !tip.tipster.user.bankName
+      ) {
+        throw new BadRequestException(
+          "Cannot purchase tip: The tipster has not set their bank account details. Please contact support.",
+        );
+      }
+
+      // Check if user is trying to buy their own tip
+      if (tip.tipster.user.id === userId) {
+        throw new BadRequestException(
+          "Cannot purchase tip: You cannot purchase your own tip",
+        );
+      }
+
+      // Check if user has already purchased this tip
+      const existingPurchase = await queryRunner.manager.findOne(Purchase, {
+        where: {
+          tip: { id: tipId },
+          buyer: { id: userId },
+        },
+      });
+
+      if (existingPurchase) {
+        if (existingPurchase.status === PurchaseStatusType.COMPLETED) {
+          throw new BadRequestException("You have already purchased this tip");
+        } else if (existingPurchase.status === PurchaseStatusType.PENDING) {
+          throw new BadRequestException(
+            "You already have a pending purchase for this tip",
+          );
+        }
+      }
+
+      // Get payment gateway (default to palmpay if not specified)
+      const gatewayId = purchaseDto.paymentGateway || "palmpay";
+      const paymentMethod = purchaseDto.paymentMethod || "mobile_money";
+      const currency = purchaseDto.currency || "GHS";
+
+      // Check if gateway is available
+      if (!this.paymentGatewayRegistry.isGatewayAvailable(gatewayId)) {
+        throw new BadRequestException(
+          `Payment gateway ${gatewayId} is not available`,
+        );
+      }
+
+      // Generate purchase reference
+      const purchaseReference = `TIP-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 9)
+        .toUpperCase()}`;
+      const paymentId = `PAY-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 9)
+        .toUpperCase()}`;
+
+      // Create purchase record
+      const purchase = queryRunner.manager.create(Purchase, {
+        tip: tip,
+        buyer: buyer,
+        amount: tip.price,
+        status: PurchaseStatusType.PENDING,
+        paymentMethod: paymentMethod,
+        paymentGateway: gatewayId,
+        purchasedAt: new Date(),
+      });
+
+      const savedPurchase = await queryRunner.manager.save(Purchase, purchase);
+
+      // Initiate payment
+      try {
+        const paymentRequest = {
+          paymentId: paymentId,
+          amount: parseFloat(tip.price.toString()),
+          currency: currency,
+          orderNumber: purchaseReference,
+          paymentReference: purchaseReference,
+          paymentMethod: paymentMethod,
+          additionalData: {
+            tipId: tip.id,
+            tipTitle: tip.title,
+            buyerId: buyer.id,
+            tipsterId: tip.tipster.id,
+          },
+        };
+
+        const paymentResponse =
+          await this.paymentGatewayRegistry.initiatePayment(
+            gatewayId,
+            paymentRequest,
+          );
+
+        // Update purchase with payment details
+        savedPurchase.paymentReference =
+          paymentResponse.transactionId || purchaseReference;
+        await queryRunner.manager.save(Purchase, savedPurchase);
+
+        // Commit transaction
+        await queryRunner.commitTransaction();
+
+        // Map to response DTO
+        const response: PurchaseTipResponseDto = {
+          id: savedPurchase.id,
+          tipId: tip.id,
+          buyerId: buyer.id,
+          amount: parseFloat(tip.price.toString()),
+          status: savedPurchase.status,
+          paymentReference: savedPurchase.paymentReference,
+          paymentMethod: savedPurchase.paymentMethod,
+          paymentGateway: savedPurchase.paymentGateway,
+          checkoutUrl: paymentResponse.checkoutUrl,
+          transactionId: paymentResponse.transactionId,
+          message: paymentResponse.message || "Payment initiated successfully",
+        };
+
+        this.logger.log(
+          `Successfully initiated purchase ${savedPurchase.id} for tip ${tipId} by user ${userId}`,
+        );
+
+        return response;
+      } catch (paymentError) {
+        // If payment fails, update purchase status to FAILED
+        savedPurchase.status = PurchaseStatusType.FAILED;
+        await queryRunner.manager.save(Purchase, savedPurchase);
+        await queryRunner.commitTransaction();
+
+        this.logger.error(
+          `Payment initiation failed for purchase ${savedPurchase.id}: ${paymentError.message}`,
+        );
+
+        throw new BadRequestException(
+          `Payment initiation failed: ${paymentError.message}`,
+        );
+      }
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error(`Error purchasing tip: ${error.message}`, error.stack);
+
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException("Failed to purchase tip");
+    } finally {
+      await queryRunner.release();
+    }
   }
 }

@@ -9,6 +9,9 @@ import { MatchData } from "../../common/entities/match-data.entity";
 import { User } from "../../common/entities/user.entity";
 import { AppSettings } from "../../common/entities/app-settings.entity";
 import { Purchase } from "../../common/entities/purchase.entity";
+import { PaymentGatewayRegistryService } from "../payments/gateways/payment-gateway-registry.service";
+import { PaymentGateway } from "../../common/entities/payment-gateway.entity";
+import { GlobalPaymentMethod } from "../../common/entities/global-payment-method.entity";
 
 @Module({
   imports: [
@@ -20,10 +23,12 @@ import { Purchase } from "../../common/entities/purchase.entity";
       User,
       AppSettings,
       Purchase,
+      PaymentGateway,
+      GlobalPaymentMethod,
     ]),
   ],
   controllers: [TipsController],
-  providers: [TipsService],
+  providers: [TipsService, PaymentGatewayRegistryService],
   exports: [TipsService],
 })
 export class TipsModule {}

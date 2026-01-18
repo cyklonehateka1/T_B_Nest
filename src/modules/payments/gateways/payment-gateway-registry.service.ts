@@ -6,12 +6,12 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { Payment } from "../common/entities/payment.entity";
+import { Payment } from "../../../common/entities/payment.entity";
 import {
   PaymentGateway,
   PaymentGatewayStatus,
-} from "../common/entities/payment-gateway.entity";
-import { GlobalPaymentMethod } from "../common/entities/global-payment-method.entity";
+} from "../../../common/entities/payment-gateway.entity";
+import { GlobalPaymentMethod } from "../../../common/entities/global-payment-method.entity";
 import {
   PaymentGatewayBase,
   PaymentRequest,
@@ -20,14 +20,12 @@ import {
   PaymentStatusResponse,
   WebhookRequest,
   WebhookResponse,
-} from "./gateways/payment-gateway-base";
-import { OGatewayService } from "./gateways/ogateway.service";
-import { StripeService } from "./gateways/stripe.service";
-import { PalmpayService } from "./gateways/palmpay.service";
+} from "./payment-gateway-base";
+import { PalmpayService } from "./palmpay/palmpay.service";
 import {
   PaymentMethodHandling,
   PaymentMethodHandlingMode,
-} from "../common/entities/payment-gateway.entity";
+} from "../../../common/entities/payment-gateway.entity";
 interface GatewayConfig {
   id: string;
   name: string;
@@ -48,9 +46,10 @@ export class PaymentGatewayRegistryService implements OnModuleInit {
     private readonly paymentGatewayRepository: Repository<PaymentGateway>,
     @InjectRepository(GlobalPaymentMethod)
     private readonly globalPaymentMethodRepository: Repository<GlobalPaymentMethod>,
-    private readonly ogatewayService: OGatewayService,
-    private readonly stripeService: StripeService,
     private readonly palmpayService: PalmpayService,
+    // Optional services - will be added when implemented
+    // private readonly ogatewayService?: OGatewayService,
+    // private readonly stripeService?: StripeService,
   ) {}
   async onModuleInit(): Promise<void> {
     this.logger.error(
@@ -75,26 +74,27 @@ export class PaymentGatewayRegistryService implements OnModuleInit {
       this.logger.error("About to call loadGatewayConfigurations...");
       await this.loadGatewayConfigurations();
       this.logger.error("loadGatewayConfigurations completed successfully");
-      if (this.ogatewayService) {
-        try {
-          this.registerGateway("ogateway", this.ogatewayService);
-        } catch (error) {
-          this.logger.error(
-            `Failed to register OGateway: ${error.message}`,
-            error.stack,
-          );
-        }
-      }
-      if (this.stripeService) {
-        try {
-          this.registerGateway("stripe", this.stripeService);
-        } catch (error) {
-          this.logger.error(
-            `Failed to register Stripe gateway: ${error.message}`,
-            error.stack,
-          );
-        }
-      }
+      // OGateway and Stripe will be registered when services are implemented
+      // if (this.ogatewayService) {
+      //   try {
+      //     this.registerGateway("ogateway", this.ogatewayService);
+      //   } catch (error) {
+      //     this.logger.error(
+      //       `Failed to register OGateway: ${error.message}`,
+      //       error.stack,
+      //     );
+      //   }
+      // }
+      // if (this.stripeService) {
+      //   try {
+      //     this.registerGateway("stripe", this.stripeService);
+      //   } catch (error) {
+      //     this.logger.error(
+      //       `Failed to register Stripe gateway: ${error.message}`,
+      //       error.stack,
+      //     );
+      //   }
+      // }
       if (this.palmpayService) {
         try {
           this.registerGateway("palmpay", this.palmpayService);
@@ -247,11 +247,13 @@ export class PaymentGatewayRegistryService implements OnModuleInit {
           );
           if (configNameLower.includes("palmpay")) {
             gateway = this.palmpayService;
-          } else if (configNameLower.includes("ogateway")) {
-            gateway = this.ogatewayService;
-          } else if (configNameLower.includes("stripe")) {
-            gateway = this.stripeService;
           }
+          // OGateway and Stripe will be added when services are implemented
+          // else if (configNameLower.includes("ogateway")) {
+          //   gateway = this.ogatewayService;
+          // } else if (configNameLower.includes("stripe")) {
+          //   gateway = this.stripeService;
+          // }
           if (gateway) {
             try {
               this.registerGateway(normalizedGatewayId, gateway);

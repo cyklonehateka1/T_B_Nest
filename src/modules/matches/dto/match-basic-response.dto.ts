@@ -6,7 +6,7 @@ export class LeagueBasicInfoDto {
   externalId?: string;
   @ApiProperty({ example: "Premier League" })
   name: string;
-  @ApiProperty({ example: "https:
+  @ApiProperty({ example: "https://tipster.bet/logos/premier-league.png" })
   logoUrl?: string | null;
   @ApiProperty({ example: "England", required: false })
   country?: string | null;
@@ -18,7 +18,7 @@ export class TeamBasicInfoDto {
   name: string;
   @ApiProperty({ example: "Man Utd", required: false })
   shortName?: string | null;
-  @ApiProperty({ example: "https:
+  @ApiProperty({ example: "https://tipster.bet/logos/manchester-united.png" })
   logoUrl?: string | null;
 }
 export class MatchBasicResponseDto {
