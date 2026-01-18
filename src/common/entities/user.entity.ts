@@ -89,6 +89,33 @@ export class User {
   twoFactorEnabledAt: Date | null;
   @Column({ name: "two_factor_backup_codes", type: "jsonb", nullable: true })
   twoFactorBackupCodes: string[] | null;
+  @Column({
+    name: "account_number",
+    type: "varchar",
+    length: 50,
+    nullable: true,
+    unique: true,
+  })
+  @IsOptional()
+  @IsString()
+  accountNumber?: string;
+  @Column({
+    name: "account_name",
+    type: "varchar",
+    length: 255,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  accountName?: string;
+  @Column({ name: "bank_code", type: "varchar", length: 50, nullable: true })
+  @IsOptional()
+  @IsString()
+  bankCode?: string;
+  @Column({ name: "bank_name", type: "varchar", length: 255, nullable: true })
+  @IsOptional()
+  @IsString()
+  bankName?: string;
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
   @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })

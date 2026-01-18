@@ -5,12 +5,21 @@ import axios, { AxiosInstance } from "axios";
 export class TheOddsApiClientService {
   private readonly logger = new Logger(TheOddsApiClientService.name);
   private readonly apiKey: string;
-  private readonly baseUrl = "https:
+  private readonly baseUrl: string;
   private readonly httpClient: AxiosInstance;
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>("THE_ODDS_API_KEY") || "";
     if (!this.apiKey) {
       this.logger.warn("THE_ODDS_API_KEY is not set. Match sync will fail.");
+    }
+    const baseUrl = this.configService.get<string>("THE_ODDS_API_BASE_URL");
+    if (!baseUrl) {
+      this.logger.warn(
+        "THE_ODDS_API_BASE_URL is not set. Using default: https://api.the-odds-api.com/v4",
+      );
+      this.baseUrl = "https://api.the-odds-api.com/v4";
+    } else {
+      this.baseUrl = baseUrl;
     }
     this.httpClient = axios.create({
       timeout: 30000,
@@ -94,6 +103,10 @@ export class TheOddsApiClientService {
             );
           }
         } catch (e) {
+          // JSON parsing failed, but we'll still return the response body
+          this.logger.debug(
+            `Failed to parse API response as JSON for sport: ${sportKey}`,
+          );
         }
       }
       this.logger.log(

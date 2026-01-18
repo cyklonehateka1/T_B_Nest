@@ -27,7 +27,7 @@ export class LeaguesController {
             name: "Premier League",
             description: null,
             country: "England",
-            logoUrl: "https:
+            logoUrl: "https://tipster.bet/logos/premier-league.png",
             isActive: true,
             sportKey: "soccer_uk",
             sportGroup: "Soccer",
@@ -70,7 +70,7 @@ export class LeaguesController {
             name: "Premier League",
             description: null,
             country: "England",
-            logoUrl: "https:
+            logoUrl: "https://tipster.bet/logos/premier-league.png",
             isActive: true,
             sportKey: "soccer_uk",
             sportGroup: "Soccer",

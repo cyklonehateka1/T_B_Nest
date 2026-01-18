@@ -9,15 +9,18 @@ import {
 } from "typeorm";
 import { IsString, IsEnum, IsOptional, IsObject } from "class-validator";
 import { GlobalPaymentMethod } from "./global-payment-method.entity";
+
 export enum PaymentGatewayStatus {
   ACTIVE = "active",
   INACTIVE = "inactive",
   MAINTENANCE = "maintenance",
 }
+
 export enum PaymentMethodHandlingMode {
   CHECKOUT_URL = "checkout_url",
   DIRECT = "direct",
 }
+
 export type PaymentMethodHandling = Record<string, PaymentMethodHandlingMode>;
 @Entity("payment_gateways")
 export class PaymentGateway {

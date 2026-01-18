@@ -43,7 +43,7 @@ export class EmailService {
     const apiKey = this.configService.get<string>("BREVO_SMTP_API_KEY");
     const baseUrl = this.configService.get<string>(
       "BREVO_SMTP_BASE_URL",
-      "https:
+      "https://api.brevo.com/v3/smtp/email",
     );
     if (!apiKey) {
       throw new Error("BREVO_SMTP_API_KEY is required for Brevo API");
@@ -52,19 +52,19 @@ export class EmailService {
     this.baseUrl = baseUrl;
     this.emailFrom = this.configService.get<string>(
       "EMAIL_FROM",
-      "support@giftbanc.com",
+      "support@tipster.bet",
     );
     this.emailFromName = this.configService.get<string>(
       "EMAIL_FROM_NAME",
-      "GiftBanc",
+      "Tipster",
     );
     this.frontendUrl = this.configService.get<string>(
       "FRONTEND_URL",
-      "https:
+      "https://tipster.bet",
     );
     this.supportEmail = this.configService.get<string>(
       "SUPPORT_EMAIL",
-      "support@giftbanc.com",
+      "support@tipster.bet",
     );
   }
   async sendEmail(options: EmailOptions): Promise<void> {

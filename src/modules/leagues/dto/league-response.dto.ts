@@ -10,7 +10,7 @@ export class LeagueResponseDto {
   description?: string | null;
   @ApiProperty({ example: "England", required: false })
   country?: string | null;
-  @ApiProperty({ example: "https:
+  @ApiProperty({ example: "https://tipster.bet/logos/premier-league.png" })
   logoUrl?: string | null;
   @ApiProperty({ example: true })
   isActive: boolean;
