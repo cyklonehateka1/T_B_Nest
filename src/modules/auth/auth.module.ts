@@ -10,11 +10,18 @@ import { User } from "../../common/entities/user.entity";
 import { UserRole } from "../../common/entities/user-role.entity";
 import { DeletedUser } from "../../common/entities/deleted-user.entity";
 import { InvalidatedToken } from "../../common/entities/invalidated-token.entity";
+import { Tipster } from "../../common/entities/tipster.entity";
 import { EmailModule } from "../email/email.module";
 @Module({
   imports: [
     PassportModule,
-    TypeOrmModule.forFeature([User, UserRole, DeletedUser, InvalidatedToken]),
+    TypeOrmModule.forFeature([
+      User,
+      UserRole,
+      DeletedUser,
+      InvalidatedToken,
+      Tipster,
+    ]),
     EmailModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

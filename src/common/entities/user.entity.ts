@@ -116,6 +116,10 @@ export class User {
   @IsOptional()
   @IsString()
   bankName?: string;
+  @Column({ name: "about_me", type: "text", nullable: true })
+  @IsOptional()
+  @IsString()
+  aboutMe?: string;
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
   @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })

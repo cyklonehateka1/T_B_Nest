@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Put,
   Body,
   UseGuards,
   Get,
@@ -26,6 +27,8 @@ import { DeleteAccountDto } from "./dto/delete-account.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { ResendOtpDto } from "./dto/resend-otp.dto";
+import { ProfileResponseDto } from "./dto/profile-response.dto";
+import { UpdateProfileDto } from "./dto/update-profile.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { User } from "../../common/entities/user.entity";
@@ -595,5 +598,69 @@ export class AuthController {
       req.socket.remoteAddress ||
       "127.0.0.1";
     return ip;
+  }
+
+  @Get("profile")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Get user profile",
+    description:
+      "Retrieve the authenticated user's profile including personal details, bank account info, and tipster statistics (if applicable).",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Profile retrieved successfully",
+    type: ProfileResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Unauthorized - invalid or missing JWT token",
+  })
+  @ApiResponse({
+    status: 404,
+    description: "User not found",
+  })
+  async getProfile(
+    @CurrentUser() currentUser: User,
+  ): Promise<ApiResponseClass<ProfileResponseDto>> {
+    return await this.authService.getProfile(currentUser.id);
+  }
+
+  @Put("profile")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Update user profile",
+    description:
+      "Update the authenticated user's profile information including personal details, about me, and bank account information.",
+  })
+  @ApiBody({ type: UpdateProfileDto })
+  @ApiResponse({
+    status: 200,
+    description: "Profile updated successfully",
+    type: ProfileResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Bad request - validation error or duplicate account number",
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Unauthorized - invalid or missing JWT token",
+  })
+  @ApiResponse({
+    status: 404,
+    description: "User not found",
+  })
+  async updateProfile(
+    @Body() updateProfileDto: UpdateProfileDto,
+    @CurrentUser() currentUser: User,
+  ): Promise<ApiResponseClass<ProfileResponseDto>> {
+    return await this.authService.updateProfile(
+      currentUser.id,
+      updateProfileDto,
+    );
   }
 }

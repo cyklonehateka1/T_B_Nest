@@ -29,6 +29,9 @@ import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { ConfigService } from "@nestjs/config";
 import { ApiResponse } from "../../common/dto/api-response.dto";
 import { EmailService } from "../email/email.service";
+import { Tipster } from "../../common/entities/tipster.entity";
+import { ProfileResponseDto } from "./dto/profile-response.dto";
+import { UpdateProfileDto } from "./dto/update-profile.dto";
 import {
   SigninResponse,
   UserSessionResponse,
@@ -45,6 +48,8 @@ export class AuthService {
     private readonly deletedUserRepository: Repository<DeletedUser>,
     @InjectRepository(InvalidatedToken)
     private readonly invalidatedTokenRepository: Repository<InvalidatedToken>,
+    @InjectRepository(Tipster)
+    private readonly tipsterRepository: Repository<Tipster>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
@@ -563,5 +568,135 @@ export class AuthService {
       accessToken,
       refreshToken,
     };
+  }
+
+  async getProfile(userId: string): Promise<ApiResponse<ProfileResponseDto>> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    // Get user roles
+    const userRoles = await this.userRoleRepository.find({
+      where: { user: { id: userId } },
+    });
+    const roles = userRoles.map((ur) => ur.role);
+
+    // Get tipster stats if user is a tipster
+    let tipsterStats: {
+      rating?: number;
+      successRate?: number;
+      totalTips?: number;
+      successfulTips?: number;
+    } = {};
+
+    const hasTipsterRole = roles.includes(UserRoleType.TIPSTER);
+    if (hasTipsterRole) {
+      const tipster = await this.tipsterRepository.findOne({
+        where: { user: { id: userId } },
+      });
+
+      if (tipster) {
+        tipsterStats = {
+          rating: parseFloat(tipster.rating.toString()),
+          successRate: parseFloat(tipster.successRate.toString()),
+          totalTips: tipster.totalTips,
+          successfulTips: tipster.successfulTips,
+        };
+      }
+    }
+
+    const profile: ProfileResponseDto = {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      displayName: user.displayName,
+      phoneNumber: user.phoneNumber,
+      avatarUrl: user.avatarUrl,
+      aboutMe: user.aboutMe,
+      isVerified: user.isVerified,
+      emailVerifiedAt: user.emailVerifiedAt,
+      lastLoginAt: user.lastLoginAt,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      accountNumber: user.accountNumber,
+      accountName: user.accountName,
+      bankCode: user.bankCode,
+      bankName: user.bankName,
+      ...tipsterStats,
+      roles: roles,
+    };
+
+    return ApiResponse.success(profile, "Profile retrieved successfully");
+  }
+
+  async updateProfile(
+    userId: string,
+    updateProfileDto: UpdateProfileDto,
+  ): Promise<ApiResponse<ProfileResponseDto>> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    // Check if account number is being changed and validate uniqueness
+    if (
+      updateProfileDto.accountNumber &&
+      updateProfileDto.accountNumber !== user.accountNumber
+    ) {
+      const existingUser = await this.userRepository.findOne({
+        where: { accountNumber: updateProfileDto.accountNumber },
+      });
+
+      if (existingUser && existingUser.id !== userId) {
+        throw new ConflictException(
+          "Account number is already in use by another user",
+        );
+      }
+    }
+
+    // Update user fields
+    if (updateProfileDto.firstName !== undefined) {
+      user.firstName = updateProfileDto.firstName;
+    }
+    if (updateProfileDto.lastName !== undefined) {
+      user.lastName = updateProfileDto.lastName;
+    }
+    if (updateProfileDto.displayName !== undefined) {
+      user.displayName = updateProfileDto.displayName;
+    }
+    if (updateProfileDto.phoneNumber !== undefined) {
+      user.phoneNumber = updateProfileDto.phoneNumber;
+    }
+    if (updateProfileDto.avatarUrl !== undefined) {
+      user.avatarUrl = updateProfileDto.avatarUrl;
+    }
+    if (updateProfileDto.aboutMe !== undefined) {
+      user.aboutMe = updateProfileDto.aboutMe;
+    }
+    if (updateProfileDto.accountNumber !== undefined) {
+      user.accountNumber = updateProfileDto.accountNumber;
+    }
+    if (updateProfileDto.accountName !== undefined) {
+      user.accountName = updateProfileDto.accountName;
+    }
+    if (updateProfileDto.bankCode !== undefined) {
+      user.bankCode = updateProfileDto.bankCode;
+    }
+    if (updateProfileDto.bankName !== undefined) {
+      user.bankName = updateProfileDto.bankName;
+    }
+
+    await this.userRepository.save(user);
+
+    // Return updated profile
+    return await this.getProfile(userId);
   }
 }

@@ -12,6 +12,11 @@ import { Purchase } from "../../common/entities/purchase.entity";
 import { PaymentGatewayRegistryService } from "../payments/gateways/payment-gateway-registry.service";
 import { PaymentGateway } from "../../common/entities/payment-gateway.entity";
 import { GlobalPaymentMethod } from "../../common/entities/global-payment-method.entity";
+import { Payment } from "../../common/entities/payment.entity";
+import { PalmpayService } from "../payments/gateways/palmpay/palmpay.service";
+import { PaymentResponseValidatorService } from "../../common/services/payment-response-validator.service";
+import { WebhookService } from "../../common/services/webhook.service";
+import { EmailModule } from "../email/email.module";
 
 @Module({
   imports: [
@@ -25,10 +30,18 @@ import { GlobalPaymentMethod } from "../../common/entities/global-payment-method
       Purchase,
       PaymentGateway,
       GlobalPaymentMethod,
+      Payment,
     ]),
+    EmailModule,
   ],
   controllers: [TipsController],
-  providers: [TipsService, PaymentGatewayRegistryService],
+  providers: [
+    TipsService,
+    PaymentGatewayRegistryService,
+    PalmpayService,
+    PaymentResponseValidatorService,
+    WebhookService,
+  ],
   exports: [TipsService],
 })
 export class TipsModule {}
