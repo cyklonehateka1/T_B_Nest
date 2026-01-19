@@ -1836,6 +1836,8 @@ export class TipsService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
+    let transactionCommitted = false;
+
     try {
       // Get buyer
       const buyer = await queryRunner.manager.findOne(User, {
@@ -1978,6 +1980,7 @@ export class TipsService {
 
         // Commit transaction
         await queryRunner.commitTransaction();
+        transactionCommitted = true;
 
         // Map to response DTO
         const response: PurchaseTipResponseDto = {
@@ -2004,6 +2007,7 @@ export class TipsService {
         savedPurchase.status = PurchaseStatusType.FAILED;
         await queryRunner.manager.save(Purchase, savedPurchase);
         await queryRunner.commitTransaction();
+        transactionCommitted = true;
 
         this.logger.error(
           `Payment initiation failed for purchase ${savedPurchase.id}: ${paymentError.message}`,
@@ -2014,7 +2018,10 @@ export class TipsService {
         );
       }
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      // Only rollback if transaction hasn't been committed
+      if (!transactionCommitted && queryRunner.isTransactionActive) {
+        await queryRunner.rollbackTransaction();
+      }
       this.logger.error(`Error purchasing tip: ${error.message}`, error.stack);
 
       if (
