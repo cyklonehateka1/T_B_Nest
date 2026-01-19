@@ -24,6 +24,10 @@ import { MatchStatusType } from "../../common/enums/match-status-type.enum";
 import { TipResponseDto, TipsterBasicInfoDto } from "./dto/tip-response.dto";
 import { TipsPageResponseDto } from "./dto/tips-page-response.dto";
 import {
+  TopTipsterDto,
+  TopTipstersPageResponseDto,
+} from "./dto/top-tipster-response.dto";
+import {
   TipEditingResponseDto,
   TipSelectionEditingDto,
 } from "./dto/tip-editing-response.dto";
@@ -2020,5 +2024,127 @@ export class TipsService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  async getTopTipsters(
+    page: number = 0,
+    size: number = 5,
+  ): Promise<TopTipstersPageResponseDto> {
+    this.logger.log(
+      `Fetching top tipsters (page: ${page}, size: ${size})`,
+    );
+
+    // Query tipsters with user relationship
+    // Order by: 1) rating DESC, 2) topTipster DESC (true first), 3) successRate DESC, 4) name ASC
+    // Note: We'll get all tipsters, sort in memory (to handle COALESCE), then paginate
+    const query = this.tipsterRepository
+      .createQueryBuilder("tipster")
+      .leftJoinAndSelect("tipster.user", "user")
+      .where("tipster.isActive = :isActive", { isActive: true });
+
+    // Get all tipsters first
+    const allTipsters = await query.getMany();
+    const totalElements = allTipsters.length;
+
+    // Sort in memory with proper null handling
+    allTipsters.sort((a, b) => {
+      // 1. Rating (DESC) - treat null as 0 (from tipster table)
+      const ratingA = a.rating ?? 0;
+      const ratingB = b.rating ?? 0;
+      if (ratingA !== ratingB) {
+        return ratingB - ratingA; // DESC
+      }
+
+      // 2. Top Tipster (DESC) - treat null as false, true comes first (from tipster table)
+      const topTipsterA = a.topTipster ?? false;
+      const topTipsterB = b.topTipster ?? false;
+      if (topTipsterA !== topTipsterB) {
+        return topTipsterB ? 1 : -1; // true first
+      }
+
+      // 3. Success Rate (DESC) - treat null as 0
+      const successRateA = a.successRate ?? 0;
+      const successRateB = b.successRate ?? 0;
+      if (successRateA !== successRateB) {
+        return successRateB - successRateA; // DESC
+      }
+
+      // 4. Name (ASC) - alphabetical
+      const nameA =
+        a.user?.displayName ||
+        `${a.user?.firstName || ""} ${a.user?.lastName || ""}`.trim() ||
+        "";
+      const nameB =
+        b.user?.displayName ||
+        `${b.user?.firstName || ""} ${b.user?.lastName || ""}`.trim() ||
+        "";
+      return nameA.localeCompare(nameB);
+    });
+
+    // Apply pagination
+    const skip = page * size;
+    const tipsters = allTipsters.slice(skip, skip + size);
+
+    // Calculate streak for each tipster and map to DTO
+    const tipsterDtos: TopTipsterDto[] = await Promise.all(
+      tipsters.map(async (tipster) => {
+        const streak = await this.calculateStreak(tipster.id);
+        const successRate = Number(tipster.successRate || 0); // Convert to number for toFixed
+        const name =
+          tipster.user?.displayName ||
+          `${tipster.user?.firstName || ""} ${tipster.user?.lastName || ""}`.trim() ||
+          "Unknown Tipster";
+        const avatar = tipster.avatarUrl || tipster.user?.avatarUrl || null;
+
+        return {
+          id: tipster.id,
+          name,
+          avatar,
+          rating: Number(tipster.rating || 0),
+          successRate: `${successRate.toFixed(0)}%`,
+          totalTips: tipster.totalTips || 0,
+          streak,
+          verified: tipster.isVerified || false,
+        };
+      }),
+    );
+
+    return {
+      tipsters: tipsterDtos,
+      totalElements,
+      totalPages: Math.ceil(totalElements / size),
+      currentPage: page,
+      pageSize: size,
+    };
+  }
+
+  private async calculateStreak(tipsterId: string): Promise<number> {
+    // Get tips ordered by publishedAt DESC (or createdAt if publishedAt is null)
+    // Count consecutive WON tips from the most recent
+    const tips = await this.tipRepository
+      .createQueryBuilder("tip")
+      .where("tip.tipster = :tipsterId", { tipsterId })
+      .andWhere("tip.isPublished = :isPublished", { isPublished: true })
+      .orderBy(
+        "COALESCE(tip.publishedAt, tip.createdAt)",
+        "DESC",
+      )
+      .getMany();
+
+    let streak = 0;
+    for (const tip of tips) {
+      if (tip.status === TipStatusType.WON) {
+        streak++;
+      } else if (
+        tip.status === TipStatusType.LOST ||
+        tip.status === TipStatusType.PENDING
+      ) {
+        // Stop counting at first LOST or PENDING tip
+        break;
+      }
+      // Continue if status is VOID or CANCELLED (they don't break the streak)
+    }
+
+    return streak;
   }
 }

@@ -32,6 +32,7 @@ import { EmailService } from "../email/email.service";
 import { Tipster } from "../../common/entities/tipster.entity";
 import { ProfileResponseDto } from "./dto/profile-response.dto";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
+import { PalmpayService } from "../payments/gateways/palmpay/palmpay.service";
 import {
   SigninResponse,
   UserSessionResponse,
@@ -637,6 +638,7 @@ export class AuthService {
   async updateProfile(
     userId: string,
     updateProfileDto: UpdateProfileDto,
+    palmpayService?: PalmpayService,
   ): Promise<ApiResponse<ProfileResponseDto>> {
     const user = await this.userRepository.findOne({
       where: { id: userId },
@@ -687,9 +689,39 @@ export class AuthService {
     if (updateProfileDto.accountName !== undefined) {
       user.accountName = updateProfileDto.accountName;
     }
+    // Handle bank code - if provided without bankName, fetch bankName from Palmpay
     if (updateProfileDto.bankCode !== undefined) {
       user.bankCode = updateProfileDto.bankCode;
+
+      // If bankCode is provided but bankName is not, try to fetch it from Palmpay
+      if (
+        !updateProfileDto.bankName &&
+        palmpayService &&
+        updateProfileDto.bankCode
+      ) {
+        // Try to find bank name by querying all supported currencies
+        const supportedCurrencies = ["NGN", "GHS", "TZS", "KES"];
+        for (const currency of supportedCurrencies) {
+          try {
+            const result = await palmpayService.queryBankList(currency, 0);
+            if (result.success && result.banks) {
+              const bank = result.banks.find(
+                (b) => b.bankCode === updateProfileDto.bankCode,
+              );
+              if (bank) {
+                user.bankName = bank.bankName;
+                break; // Found the bank, no need to check other currencies
+              }
+            }
+          } catch (error) {
+            // Continue to next currency if query fails
+            continue;
+          }
+        }
+      }
     }
+
+    // If bankName is explicitly provided, use it (overrides any fetched value)
     if (updateProfileDto.bankName !== undefined) {
       user.bankName = updateProfileDto.bankName;
     }

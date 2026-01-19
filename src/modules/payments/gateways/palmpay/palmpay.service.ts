@@ -128,6 +128,23 @@ export interface PalmpayQueryStatusApiResponse {
   respMsg: string;
   respCode: string;
 }
+export interface PalmpayBankInfo {
+  bankCode: string;
+  bankName: string;
+  bankUrl?: string;
+  bgUrl?: string;
+}
+export interface PalmpayQueryBankListRequest {
+  requestTime: number; // Timestamp in milliseconds
+  version: string; // API version (e.g., "V1.1")
+  nonceStr: string; // Random string for request uniqueness
+  businessType: number; // Business type (0 for payout)
+}
+export interface PalmpayQueryBankListResponse {
+  respCode: string; // Response code (e.g., "00000000" for success)
+  respMsg: string; // Response message (e.g., "success")
+  data?: PalmpayBankInfo | PalmpayBankInfo[]; // Bank info or array of bank info
+}
 @Injectable()
 export class PalmpayService extends PaymentGatewayBase {
   protected readonly logger = new Logger(PalmpayService.name);
@@ -560,14 +577,14 @@ export class PalmpayService extends PaymentGatewayBase {
       }
       const validatedWebhookData =
         this.paymentResponseValidatorService.validatePaymentResponse({
-            success: true,
-            transactionId:
-              webhookPayload.orderNo ||
-              payment.providerTransactionId ||
-              payment.orderNumber,
-            status: mappedStatus || (payment.status as string),
-            message: `Payment status: ${this.mapPalmpayStatus(webhookPayload.orderStatus)} (Status: ${webhookPayload.status}, Order Status: ${webhookPayload.orderStatus})`,
-            data: webhookPayload,
+          success: true,
+          transactionId:
+            webhookPayload.orderNo ||
+            payment.providerTransactionId ||
+            payment.orderNumber,
+          status: mappedStatus || (payment.status as string),
+          message: `Payment status: ${this.mapPalmpayStatus(webhookPayload.orderStatus)} (Status: ${webhookPayload.status}, Order Status: ${webhookPayload.orderStatus})`,
+          data: webhookPayload,
         });
       if (validatedWebhookData.transactionId) {
         payment.providerTransactionId = validatedWebhookData.transactionId;
@@ -619,15 +636,15 @@ export class PalmpayService extends PaymentGatewayBase {
         await queryRunner.manager.save(Payment, payment);
         // Update Purchase status based on payment status if purchase exists
         if (payment.purchase) {
-        if (webhookPayload.orderStatus === 2) {
+          if (webhookPayload.orderStatus === 2) {
             // Payment successful - mark purchase as completed
             payment.purchase.status = PurchaseStatusType.COMPLETED;
             await queryRunner.manager.save(Purchase, payment.purchase);
-        } else if (webhookPayload.orderStatus === 3) {
+          } else if (webhookPayload.orderStatus === 3) {
             // Payment failed
             payment.purchase.status = PurchaseStatusType.FAILED;
             await queryRunner.manager.save(Purchase, payment.purchase);
-        } else if (webhookPayload.orderStatus === 4) {
+          } else if (webhookPayload.orderStatus === 4) {
             // Payment cancelled
             payment.purchase.status = PurchaseStatusType.CANCELLED;
             await queryRunner.manager.save(Purchase, payment.purchase);
@@ -901,17 +918,17 @@ export class PalmpayService extends PaymentGatewayBase {
       }
       const validatedWebhookData =
         this.paymentResponseValidatorService.validatePaymentResponse({
-            success: true,
-            transactionId:
-              webhookPayload.orderNo ||
-              payment.providerTransactionId ||
-              payment.orderNumber,
-            status: mappedStatus || (payment.status as string),
-            message: `Virtual account payment status: ${this.mapPalmpayStatus(webhookPayload.orderStatus)}`,
-            data: {
-              ...webhookPayload,
-              amount: webhookPayload.orderAmount / 100,
-            },
+          success: true,
+          transactionId:
+            webhookPayload.orderNo ||
+            payment.providerTransactionId ||
+            payment.orderNumber,
+          status: mappedStatus || (payment.status as string),
+          message: `Virtual account payment status: ${this.mapPalmpayStatus(webhookPayload.orderStatus)}`,
+          data: {
+            ...webhookPayload,
+            amount: webhookPayload.orderAmount / 100,
+          },
         });
       if (validatedWebhookData.transactionId) {
         payment.providerTransactionId = validatedWebhookData.transactionId;
@@ -953,35 +970,35 @@ export class PalmpayService extends PaymentGatewayBase {
       }
       // Update Purchase status based on payment status if purchase exists
       if (payment.purchase) {
-      if (webhookPayload.orderStatus === 2) {
+        if (webhookPayload.orderStatus === 2) {
           // Payment successful - mark purchase as completed
           try {
             payment.purchase.status = PurchaseStatusType.COMPLETED;
             await this.purchaseRepository.save(payment.purchase);
           } catch (purchaseError) {
-          this.logger.error(
+            this.logger.error(
               `Failed to update purchase ${payment.purchase.id} to completed: ${purchaseError.message}`,
-          );
-        }
-      } else if (webhookPayload.orderStatus === 3) {
+            );
+          }
+        } else if (webhookPayload.orderStatus === 3) {
           // Payment failed
-        try {
+          try {
             payment.purchase.status = PurchaseStatusType.FAILED;
             await this.purchaseRepository.save(payment.purchase);
           } catch (purchaseError) {
-          this.logger.error(
+            this.logger.error(
               `Failed to mark purchase ${payment.purchase.id} as failed: ${purchaseError.message}`,
-          );
-        }
-      } else if (webhookPayload.orderStatus === 4) {
+            );
+          }
+        } else if (webhookPayload.orderStatus === 4) {
           // Payment cancelled
-        try {
+          try {
             payment.purchase.status = PurchaseStatusType.CANCELLED;
             await this.purchaseRepository.save(payment.purchase);
           } catch (purchaseError) {
-          this.logger.error(
+            this.logger.error(
               `Failed to mark purchase ${payment.purchase.id} as cancelled: ${purchaseError.message}`,
-          );
+            );
           }
         }
       }
@@ -1048,6 +1065,168 @@ export class PalmpayService extends PaymentGatewayBase {
       return false;
     }
   }
+  /**
+   * Query bank list from Palmpay for a specific country
+   * @param currency Currency code (GHS, NGN, TZS, KES) - used to determine country code
+   * @param businessType Business type (0 for payout)
+   * @returns List of banks/MMO networks with their codes
+   */
+  async queryBankList(
+    currency: string,
+    businessType: number = 0,
+  ): Promise<{
+    success: boolean;
+    banks?: PalmpayBankInfo[];
+    message: string;
+    error?: string;
+  }> {
+    try {
+      // Extract country code from currency
+      const countryCodeMap: Record<string, string> = {
+        GHS: "GH",
+        NGN: "NG",
+        KES: "KE",
+        TZS: "TZ",
+      };
+      const countryCode = countryCodeMap[currency.toUpperCase()] || "NG";
+
+      // Generate nonce string
+      const generateNonce = (length = 32): string => {
+        const chars =
+          "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        let result = "";
+        for (let i = 0; i < length; i++) {
+          result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+      };
+      const nonceStr = generateNonce();
+
+      // Build query bank list request
+      const queryRequest: PalmpayQueryBankListRequest = {
+        requestTime: Date.now(),
+        version: "V1.1",
+        nonceStr,
+        businessType,
+      };
+
+      // Make API request with country code in header
+      // We need to pass currency in the request data so makeApiRequest can determine country code
+      // But we also need to explicitly set the country code in headers
+      const queryString = Object.entries(queryRequest)
+        .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+        .map(([key, value]) => `${key}=${String(value)}`)
+        .join("&");
+      const md5Str = crypto
+        .createHash("md5")
+        .update(queryString)
+        .digest("hex")
+        .toUpperCase()
+        .trim();
+      const formattedPrivateKey = this.formatPrivateKey(this.privateKey);
+      const signer = crypto.createSign("RSA-SHA1");
+      signer.update(md5Str);
+      signer.end();
+      const signature = signer.sign(formattedPrivateKey, "base64");
+
+      const config = {
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          CountryCode: countryCode,
+          Authorization: `Bearer ${this.appId}`,
+          Signature: signature,
+        },
+        timeout: 30000,
+      };
+
+      const requestUrl = `${this.baseUrl}/api/v2/general/merchant/queryBankList`;
+
+      // Log request payload for debugging
+      this.logger.log("Palmpay bank list request payload:", {
+        url: requestUrl,
+        payload: queryRequest,
+        countryCode,
+        currency,
+        queryString,
+        md5Hash: md5Str,
+        signature,
+        headers: config.headers,
+      });
+
+      const response: AxiosResponse = await axios.post(
+        requestUrl,
+        queryRequest,
+        config,
+      );
+
+      if (!response.data) {
+        return {
+          success: false,
+          message: "Empty response from Palmpay API",
+          error: "Empty response",
+        };
+      }
+
+      // Check if Palmpay returned an error in the response body (even with HTTP 200)
+      if (
+        response.data?.respCode &&
+        response.data.respCode !== "00000" &&
+        response.data.respCode !== "00000000"
+      ) {
+        const errorMsg =
+          response.data?.respMsg ||
+          `Palmpay API error: ${response.data.respCode}`;
+        this.logger.error("Palmpay bank list query returned an error:", {
+          currency,
+          countryCode,
+          respCode: response.data.respCode,
+          respMsg: response.data.respMsg,
+        });
+        return {
+          success: false,
+          message: errorMsg,
+          error: response.data.respCode,
+        };
+      }
+
+      // Handle response
+      const apiResponse = response.data as PalmpayQueryBankListResponse;
+
+      if (!apiResponse) {
+        return {
+          success: false,
+          message: "Empty response from Palmpay API",
+          error: "Empty response",
+        };
+      }
+
+      // Handle data - can be single object or array
+      let banks: PalmpayBankInfo[] = [];
+      if (Array.isArray(apiResponse.data)) {
+        banks = apiResponse.data;
+      } else if (apiResponse.data) {
+        banks = [apiResponse.data];
+      }
+
+      return {
+        success: true,
+        banks,
+        message: apiResponse.respMsg || "Bank list retrieved successfully",
+      };
+    } catch (error) {
+      this.logger.error("Palmpay bank list query failed:", {
+        error: error.message,
+        currency,
+      });
+      return {
+        success: false,
+        message: error.message || "Bank list query failed",
+        error: error.message,
+      };
+    }
+  }
+
   private async makeApiRequest(
     endpoint: string,
     data: any = {},
