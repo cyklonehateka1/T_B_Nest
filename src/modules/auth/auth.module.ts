@@ -11,7 +11,12 @@ import { UserRole } from "../../common/entities/user-role.entity";
 import { DeletedUser } from "../../common/entities/deleted-user.entity";
 import { InvalidatedToken } from "../../common/entities/invalidated-token.entity";
 import { Tipster } from "../../common/entities/tipster.entity";
+import { Payment } from "../../common/entities/payment.entity";
+import { Purchase } from "../../common/entities/purchase.entity";
 import { EmailModule } from "../email/email.module";
+import { PalmpayService } from "../payments/gateways/palmpay/palmpay.service";
+import { PaymentResponseValidatorService } from "../../common/services/payment-response-validator.service";
+import { WebhookService } from "../../common/services/webhook.service";
 @Module({
   imports: [
     PassportModule,
@@ -21,6 +26,8 @@ import { EmailModule } from "../email/email.module";
       DeletedUser,
       InvalidatedToken,
       Tipster,
+      Payment,
+      Purchase,
     ]),
     EmailModule,
     JwtModule.registerAsync({
@@ -35,7 +42,13 @@ import { EmailModule } from "../email/email.module";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    PalmpayService,
+    PaymentResponseValidatorService,
+    WebhookService,
+  ],
   exports: [AuthService],
 })
 export class AuthModule {}

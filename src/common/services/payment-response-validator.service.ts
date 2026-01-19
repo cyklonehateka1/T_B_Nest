@@ -24,7 +24,9 @@ export class PaymentResponseValidatorService {
     }
 
     if (response.success === false && !response.errors?.length) {
-      this.logger.warn("Payment response indicates failure but no errors provided");
+      this.logger.warn(
+        "Payment response indicates failure but no errors provided",
+      );
       return {
         ...response,
         errors: response.errors || ["Payment failed"],

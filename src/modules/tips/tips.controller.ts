@@ -22,6 +22,9 @@ import {
 import { TipsService } from "./tips.service";
 import { TipsPageResponseDto } from "./dto/tips-page-response.dto";
 import { TipResponseDto } from "./dto/tip-response.dto";
+import {
+  TopTipstersPageResponseDto,
+} from "./dto/top-tipster-response.dto";
 import { TipEditingResponseDto } from "./dto/tip-editing-response.dto";
 import { CreateTipDto } from "./dto/create-tip.dto";
 import { UpdateTipDto } from "./dto/update-tip.dto";
@@ -180,6 +183,70 @@ export class TipsController {
     );
 
     return ApiResponseClass.success(response, "Tips retrieved successfully");
+  }
+
+  @Get("top-tipsters")
+  @ApiOperation({
+    summary: "Get top tipsters based on rating",
+    description:
+      "Retrieve top tipsters sorted by rating (from User table). Includes pagination support. Default returns top 5 tipsters.",
+  })
+  @ApiQuery({
+    name: "page",
+    required: false,
+    description: "Page number (0-based)",
+    example: 0,
+    type: Number,
+  })
+  @ApiQuery({
+    name: "size",
+    required: false,
+    description: "Page size (number of tipsters per page). Default is 5.",
+    example: 5,
+    type: Number,
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Top tipsters retrieved successfully",
+    type: TopTipstersPageResponseDto,
+    schema: {
+      example: {
+        success: true,
+        data: {
+          tipsters: [
+            {
+              id: "550e8400-e29b-41d4-a716-446655440000",
+              name: "John Smith",
+              avatar: "https://example.com/avatar.png",
+              rating: 92,
+              successRate: "87%",
+              totalTips: 156,
+              streak: 8,
+              verified: true,
+            },
+          ],
+          totalElements: 50,
+          totalPages: 10,
+          currentPage: 0,
+          pageSize: 5,
+        },
+        message: "Top tipsters retrieved successfully",
+      },
+    },
+  })
+  async getTopTipsters(
+    @Query("page") page?: number,
+    @Query("size") size?: number,
+  ): Promise<ApiResponseClass<TopTipstersPageResponseDto>> {
+    const pageNum = page !== undefined ? Number(page) : 0;
+    const pageSize = size !== undefined ? Number(size) : 5; // Default to 5
+
+    const response = await this.tipsService.getTopTipsters(pageNum, pageSize);
+
+    return ApiResponseClass.success(
+      response,
+      "Top tipsters retrieved successfully",
+    );
   }
 
   @Get("my-tips")

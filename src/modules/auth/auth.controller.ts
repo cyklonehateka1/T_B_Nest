@@ -8,6 +8,9 @@ import {
   HttpCode,
   HttpStatus,
   Req,
+  Query,
+  BadRequestException,
+  Logger,
 } from "@nestjs/common";
 import { Request } from "express";
 import {
@@ -17,8 +20,10 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiProperty,
+  ApiQuery,
 } from "@nestjs/swagger";
 import { AuthService } from "./auth.service";
+import { PalmpayService } from "../payments/gateways/palmpay/palmpay.service";
 import { SigninDto } from "./dto/signin.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { VerifyOtpDto } from "./dto/verify-otp.dto";
@@ -72,7 +77,12 @@ class UserSessionResponseDto {
 @ApiTags("Authentication")
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  private readonly logger = new Logger(AuthController.name);
+
+  constructor(
+    private readonly authService: AuthService,
+    private readonly palmpayService: PalmpayService,
+  ) {}
   @Post("login")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -661,6 +671,96 @@ export class AuthController {
     return await this.authService.updateProfile(
       currentUser.id,
       updateProfileDto,
+      this.palmpayService,
     );
+  }
+
+  @Get("banks")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Get list of banks/MMO networks",
+    description:
+      "Retrieve list of banks and mobile money networks available for a specific currency. Used for profile bank account configuration.",
+  })
+  @ApiQuery({
+    name: "currency",
+    required: true,
+    description: "Currency code (GHS, NGN, TZS, KES)",
+    example: "NGN",
+    enum: ["GHS", "NGN", "TZS", "KES"],
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Bank list retrieved successfully",
+    schema: {
+      example: {
+        success: true,
+        data: [
+          {
+            bankCode: "058",
+            bankName: "Guaranty Trust Bank",
+          },
+          {
+            bankCode: "050",
+            bankName: "Access Bank",
+          },
+        ],
+        message: "Bank list retrieved successfully",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Bad request - invalid currency or missing currency parameter",
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Unauthorized - invalid or missing JWT token",
+  })
+  async getBanks(
+    @Query("currency") currency: string,
+  ): Promise<ApiResponseClass<Array<{ bankCode: string; bankName: string }>>> {
+    if (!currency) {
+      throw new BadRequestException("Currency parameter is required");
+    }
+
+    try {
+      const result = await this.palmpayService.queryBankList(currency, 0);
+
+      if (!result.success || !result.banks) {
+        // Log the actual Palmpay error for debugging, but don't expose it to customers
+        this.logger.error(
+          `Failed to retrieve bank list for currency ${currency}: ${result.message || result.error}`,
+        );
+        // Return a generic error message to customers
+        return ApiResponseClass.error(
+          "Unable to retrieve bank list at this time. Please try again later.",
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Map to simplified response format
+      const banks = result.banks.map((bank) => ({
+        bankCode: bank.bankCode,
+        bankName: bank.bankName,
+      }));
+
+      return ApiResponseClass.success(
+        banks,
+        "Bank list retrieved successfully",
+      );
+    } catch (error) {
+      // Log the actual error for debugging, but don't expose it to customers
+      this.logger.error(
+        `Error retrieving bank list for currency ${currency}: ${error.message || error}`,
+      );
+      // Return a generic error message to customers
+      return ApiResponseClass.error(
+        "Unable to retrieve bank list at this time. Please try again later.",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 }
