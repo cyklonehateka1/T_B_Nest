@@ -22,14 +22,17 @@ export enum PaymentMethodType {
 export class PaymentMethod {
   @PrimaryGeneratedColumn("uuid")
   id: string;
+
   @Column()
   @IsString()
   @IsNotEmpty()
   name: string;
+
   @Column("text")
   @IsString()
   @IsNotEmpty()
   description: string;
+
   @Column({
     type: "enum",
     enum: PaymentMethodType,
@@ -37,27 +40,35 @@ export class PaymentMethod {
   })
   @IsString()
   type: PaymentMethodType;
+
   @Column({ default: true })
   @IsBoolean()
   enabled: boolean;
+
   @Column("json", { nullable: true })
   @IsOptional()
   configuration?: Record<string, any>;
+
   @Column()
   @IsString()
   @IsNotEmpty()
   countrySettingsId: string;
+
   @ManyToOne(() => CountrySettings, { onDelete: "CASCADE" })
   @JoinColumn({ name: "countrySettingsId" })
   countrySettings: CountrySettings;
+
   @Column({ nullable: true })
   @IsOptional()
   globalPaymentMethodId?: string;
+
   @ManyToOne(() => GlobalPaymentMethod, { nullable: true })
   @JoinColumn({ name: "globalPaymentMethodId" })
   globalPaymentMethod?: GlobalPaymentMethod;
+
   @CreateDateColumn()
   createdAt: Date;
+
   @UpdateDateColumn()
   updatedAt: Date;
 }
