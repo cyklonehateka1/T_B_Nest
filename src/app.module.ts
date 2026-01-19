@@ -12,6 +12,7 @@ import { MatchesModule } from "./modules/matches/matches.module";
 import { MatchSyncModule } from "./modules/match-sync/match-sync.module";
 import { TipsModule } from "./modules/tips/tips.module";
 import { AppSettingsModule } from "./modules/app-settings/app-settings.module";
+import { CountrySettingsModule } from "./modules/country-settings/country-settings.module";
 import { AuditLog } from "./common/entities/audit-log.entity";
 import { UserInvite } from "./common/entities/user-invite.entity";
 import { TemporarySession } from "./common/entities/temporary-session.entity";
@@ -118,6 +119,7 @@ import { EnvironmentValidationService } from "./common/services/environment-vali
     MatchSyncModule,
     TipsModule,
     AppSettingsModule,
+    CountrySettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService, RateLimitingService, EnvironmentValidationService],

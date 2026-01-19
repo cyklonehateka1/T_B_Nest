@@ -25,6 +25,8 @@ import { TipResponseDto } from "./dto/tip-response.dto";
 import {
   TopTipstersPageResponseDto,
 } from "./dto/top-tipster-response.dto";
+import { TipsterDetailsDto } from "./dto/tipster-details-response.dto";
+import { TipsterTipsResponseDto } from "./dto/tipster-tips-response.dto";
 import { TipEditingResponseDto } from "./dto/tip-editing-response.dto";
 import { CreateTipDto } from "./dto/create-tip.dto";
 import { UpdateTipDto } from "./dto/update-tip.dto";
@@ -246,6 +248,109 @@ export class TipsController {
     return ApiResponseClass.success(
       response,
       "Top tipsters retrieved successfully",
+    );
+  }
+
+  @Get("tipsters/:id/tips")
+  @ApiOperation({
+    summary: "Get recent tips for a tipster",
+    description:
+      "Retrieve recent published tips for a specific tipster, ordered by published date (newest first). Returns tips with tipster's current success rate.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Tipster tips retrieved successfully",
+    type: TipsterTipsResponseDto,
+    schema: {
+      example: {
+        success: true,
+        data: {
+          tips: [
+            {
+              id: "550e8400-e29b-41d4-a716-446655440000",
+              title: "Premier League Double",
+              price: 4.99,
+              status: "won",
+              successRate: "92%",
+              createdAt: "2024-01-15T10:00:00Z",
+            },
+          ],
+        },
+        message: "Tipster tips retrieved successfully",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Tipster not found",
+    schema: {
+      example: {
+        statusCode: 404,
+        message: "Tipster not found: 550e8400-e29b-41d4-a716-446655440000",
+        success: false,
+      },
+    },
+  })
+  async getTipsterTips(
+    @Param("id") id: string,
+  ): Promise<ApiResponseClass<TipsterTipsResponseDto>> {
+    const response = await this.tipsService.getTipsterTips(id);
+
+    return ApiResponseClass.success(
+      response,
+      "Tipster tips retrieved successfully",
+    );
+  }
+
+  @Get("tipsters/:id")
+  @ApiOperation({
+    summary: "Get tipster details",
+    description:
+      "Retrieve detailed information about a specific tipster, including rating, success rate, total tips, streak, and profile information.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Tipster details retrieved successfully",
+    type: TipsterDetailsDto,
+    schema: {
+      example: {
+        success: true,
+        data: {
+          id: "550e8400-e29b-41d4-a716-446655440000",
+          name: "John Smith",
+          avatar: "https://example.com/avatar.png",
+          rating: 92,
+          successRate: "87%",
+          totalTips: 156,
+          streak: 8,
+          verified: true,
+          bio: "Professional football analyst with over 10 years of experience.",
+          joinedAt: "2023-01-15T00:00:00Z",
+          lastActive: "2024-01-15T10:15:00Z",
+        },
+        message: "Tipster details retrieved successfully",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Tipster not found",
+    schema: {
+      example: {
+        statusCode: 404,
+        message: "Tipster not found: 550e8400-e29b-41d4-a716-446655440000",
+        success: false,
+      },
+    },
+  })
+  async getTipsterDetails(
+    @Param("id") id: string,
+  ): Promise<ApiResponseClass<TipsterDetailsDto>> {
+    const response = await this.tipsService.getTipsterDetails(id);
+
+    return ApiResponseClass.success(
+      response,
+      "Tipster details retrieved successfully",
     );
   }
 

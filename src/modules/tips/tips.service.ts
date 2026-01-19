@@ -27,6 +27,11 @@ import {
   TopTipsterDto,
   TopTipstersPageResponseDto,
 } from "./dto/top-tipster-response.dto";
+import { TipsterDetailsDto } from "./dto/tipster-details-response.dto";
+import {
+  TipsterTipsResponseDto,
+  TipsterTipDto,
+} from "./dto/tipster-tips-response.dto";
 import {
   TipEditingResponseDto,
   TipSelectionEditingDto,
@@ -2115,6 +2120,85 @@ export class TipsService {
       totalPages: Math.ceil(totalElements / size),
       currentPage: page,
       pageSize: size,
+    };
+  }
+
+  async getTipsterDetails(tipsterId: string): Promise<TipsterDetailsDto> {
+    this.logger.log(`Fetching tipster details for tipster ${tipsterId}`);
+
+    const tipster = await this.tipsterRepository.findOne({
+      where: { id: tipsterId, isActive: true },
+      relations: ["user"],
+    });
+
+    if (!tipster) {
+      throw new NotFoundException(`Tipster not found: ${tipsterId}`);
+    }
+
+    const streak = await this.calculateStreak(tipsterId);
+    const successRate = Number(tipster.successRate || 0);
+    const rating = Number(tipster.rating || 0);
+
+    const name =
+      tipster.user?.displayName ||
+      `${tipster.user?.firstName || ""} ${tipster.user?.lastName || ""}`.trim() ||
+      "Unknown Tipster";
+    
+    const avatar = tipster.avatarUrl || tipster.user?.avatarUrl || null;
+
+    const response: TipsterDetailsDto = {
+      id: tipster.id,
+      name,
+      avatar,
+      rating,
+      successRate: `${successRate.toFixed(0)}%`,
+      totalTips: tipster.totalTips || 0,
+      streak,
+      verified: tipster.isVerified || false,
+      bio: tipster.bio || null,
+      joinedAt: tipster.createdAt || tipster.user?.createdAt || new Date(),
+      lastActive: tipster.user?.lastLoginAt || null,
+    };
+
+    return response;
+  }
+
+  async getTipsterTips(tipsterId: string): Promise<TipsterTipsResponseDto> {
+    this.logger.log(`Fetching tips for tipster ${tipsterId}`);
+
+    const tipster = await this.tipsterRepository.findOne({
+      where: { id: tipsterId, isActive: true },
+    });
+
+    if (!tipster) {
+      throw new NotFoundException(`Tipster not found: ${tipsterId}`);
+    }
+
+    // Get published tips for this tipster, ordered by publishedAt DESC (or createdAt DESC)
+    const tips = await this.tipRepository
+      .createQueryBuilder("tip")
+      .where("tip.tipster = :tipsterId", { tipsterId })
+      .andWhere("tip.isPublished = :isPublished", { isPublished: true })
+      .orderBy(
+        "COALESCE(tip.publishedAt, tip.createdAt)",
+        "DESC",
+      )
+      .getMany();
+
+    const successRate = Number(tipster.successRate || 0);
+    const successRateFormatted = `${successRate.toFixed(0)}%`;
+
+    const tipDtos: TipsterTipDto[] = tips.map((tip) => ({
+      id: tip.id,
+      title: tip.title,
+      price: parseFloat(tip.price.toString()),
+      status: tip.status, // Already lowercase from enum
+      successRate: successRateFormatted, // Use tipster's current success rate
+      createdAt: tip.publishedAt || tip.createdAt,
+    }));
+
+    return {
+      tips: tipDtos,
     };
   }
 
