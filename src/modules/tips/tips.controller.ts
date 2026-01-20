@@ -10,7 +10,10 @@ import {
   UseGuards,
   Param,
   BadRequestException,
+  HttpCode,
+  HttpStatus,
 } from "@nestjs/common";
+import { Request as ExpressRequest } from "express";
 import {
   ApiTags,
   ApiOperation,
@@ -1061,13 +1064,14 @@ export class TipsController {
   @Post(":id/purchase")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: "Purchase a tip/prediction",
     description:
       "Purchase a published tip. Validates that both buyer and tipster have bank account details set (required for escrow). Initiates payment using the specified payment gateway (defaults to PalmPay).",
   })
   @ApiResponse({
-    status: 200,
+    status: 201,
     description: "Purchase initiated successfully",
     type: PurchaseTipResponseDto,
     schema: {
@@ -1128,7 +1132,7 @@ export class TipsController {
   async purchaseTip(
     @Param("id") tipId: string,
     @Body() purchaseDto: PurchaseTipDto,
-    @Request() req: any,
+    @Request() req: ExpressRequest & { user?: { id: string } },
   ): Promise<ApiResponseClass<PurchaseTipResponseDto>> {
     const userId = req.user?.id;
 
@@ -1136,15 +1140,29 @@ export class TipsController {
       throw new Error("User ID not found in request");
     }
 
+    // Extract IP address from request
+    const ipAddress = this.extractUserIP(req);
+
     const purchase = await this.tipsService.purchaseTip(
       tipId,
       userId,
       purchaseDto,
+      ipAddress,
     );
 
     return ApiResponseClass.success(
       purchase,
       "Purchase initiated successfully",
     );
+  }
+
+  private extractUserIP(req: ExpressRequest): string {
+    const ip =
+      req.headers["x-forwarded-for"]?.toString().split(",")[0] ||
+      req.headers["x-real-ip"]?.toString() ||
+      req.headers["x-client-ip"]?.toString() ||
+      req.socket.remoteAddress ||
+      "127.0.0.1";
+    return ip;
   }
 }

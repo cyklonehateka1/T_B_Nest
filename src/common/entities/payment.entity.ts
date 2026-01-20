@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from "typeorm";
 import {
   IsString,
@@ -17,6 +18,7 @@ import {
 import { Purchase } from "./purchase.entity";
 import { GlobalPaymentMethod } from "./global-payment-method.entity";
 import { PaymentGateway } from "./payment-gateway.entity";
+import { PaymentType } from "../enums/payment-type.enum";
 
 export enum PaymentStatus {
   PENDING = "pending",
@@ -48,9 +50,22 @@ export interface PaymentResponseData {
 }
 
 @Entity("payments")
+@Index("idx_payments_type", ["type"])
+@Index("idx_payments_status", ["status"])
+@Index("idx_payments_purchase_id", ["purchaseId"])
 export class Payment {
   @PrimaryGeneratedColumn("uuid")
   id: string;
+
+  @Column({
+    type: "enum",
+    enum: PaymentType,
+    enumName: "payment_type",
+    nullable: false,
+    default: PaymentType.TIP_PURCHASE,
+  })
+  @IsEnum(PaymentType)
+  type: PaymentType;
 
   @ManyToOne(() => Purchase, { nullable: true })
   @JoinColumn({ name: "purchaseId" })

@@ -17,6 +17,8 @@ import { PalmpayService } from "../payments/gateways/palmpay/palmpay.service";
 import { PaymentResponseValidatorService } from "../../common/services/payment-response-validator.service";
 import { WebhookService } from "../../common/services/webhook.service";
 import { EmailModule } from "../email/email.module";
+import { CountrySettingsModule } from "../country-settings/country-settings.module";
+import { CountrySettings } from "../../common/entities/country-settings.entity";
 
 @Module({
   imports: [
@@ -31,8 +33,10 @@ import { EmailModule } from "../email/email.module";
       PaymentGateway,
       GlobalPaymentMethod,
       Payment,
+      CountrySettings,
     ]),
     EmailModule,
+    CountrySettingsModule,
   ],
   controllers: [TipsController],
   providers: [

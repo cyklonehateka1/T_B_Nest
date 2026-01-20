@@ -50,6 +50,15 @@ import { PurchaseStatusType } from "../../common/enums/purchase-status-type.enum
 import { PurchaseTipDto } from "./dto/purchase-tip.dto";
 import { PurchaseTipResponseDto } from "./dto/purchase-tip-response.dto";
 import { PaymentGatewayRegistryService } from "../payments/gateways/payment-gateway-registry.service";
+import { CountryDetectionService } from "../../common/services/country-detection.service";
+import { CountrySettings } from "../../common/entities/country-settings.entity";
+import {
+  Payment,
+  PaymentStatus,
+} from "../../common/entities/payment.entity";
+import { PaymentType } from "../../common/enums/payment-type.enum";
+import { GlobalPaymentMethod } from "../../common/entities/global-payment-method.entity";
+import { PaymentGateway } from "../../common/entities/payment-gateway.entity";
 
 @Injectable()
 export class TipsService {
@@ -73,8 +82,17 @@ export class TipsService {
     private readonly appSettingsRepository: Repository<AppSettings>,
     @InjectRepository(Purchase)
     private readonly purchaseRepository: Repository<Purchase>,
+    @InjectRepository(CountrySettings)
+    private readonly countrySettingsRepository: Repository<CountrySettings>,
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
+    @InjectRepository(GlobalPaymentMethod)
+    private readonly globalPaymentMethodRepository: Repository<GlobalPaymentMethod>,
+    @InjectRepository(PaymentGateway)
+    private readonly paymentGatewayRepository: Repository<PaymentGateway>,
     private readonly dataSource: DataSource,
     private readonly paymentGatewayRegistry: PaymentGatewayRegistryService,
+    private readonly countryDetectionService: CountryDetectionService,
   ) {}
 
   async getTips(
@@ -1827,6 +1845,7 @@ export class TipsService {
     tipId: string,
     userId: string,
     purchaseDto: PurchaseTipDto,
+    ipAddress: string,
   ): Promise<PurchaseTipResponseDto> {
     this.logger.debug(
       `User ${userId} attempting to purchase tip ${tipId} with payment method ${purchaseDto.paymentMethod}`,
@@ -1912,13 +1931,63 @@ export class TipsService {
           throw new BadRequestException(
             "You already have a pending purchase for this tip",
           );
+        } else if (existingPurchase.status === PurchaseStatusType.FAILED) {
+          // Allow retry for failed purchases - delete the failed purchase record
+          await queryRunner.manager.delete(Purchase, {
+            id: existingPurchase.id,
+          });
+          this.logger.debug(
+            `Deleted failed purchase ${existingPurchase.id} for tip ${tipId} by user ${userId}`,
+          );
         }
       }
+
+      // Detect country from IP address
+      const countryDetection = await this.countryDetectionService.detectCountryFromIP(
+        ipAddress,
+      );
+
+      // Get country settings from database
+      const countrySettings = await queryRunner.manager.findOne(
+        CountrySettings,
+        {
+          where: { countryCode: countryDetection.countryCode },
+        },
+      );
+
+      if (!countrySettings) {
+        throw new BadRequestException(
+          `Payment is not available for your country (${countryDetection.countryCode}). Please contact support.`,
+        );
+      }
+
+      // Validate that country settings have currency and conversion rate
+      if (
+        !countrySettings.localCurrencyCode ||
+        !countrySettings.localCurrencyToUsdRate
+      ) {
+        throw new BadRequestException(
+          `Currency settings are not configured for your country. Please contact support.`,
+        );
+      }
+
+      // Convert USD amount to local currency
+      // The localCurrencyToUsdRate appears to be stored as "USD to local" 
+      // (how many local currency units per 1 USD), despite the entity comment.
+      // Example: If rate = 10.8, then 1 USD = 10.8 GHS
+      // So to convert USD to local: localCurrency = USD * rate
+      const usdAmount = parseFloat(tip.price.toString());
+      const localCurrencyAmount =
+        usdAmount * countrySettings.localCurrencyToUsdRate;
+      const localCurrencyCode = countrySettings.localCurrencyCode;
+
+      this.logger.debug(
+        `Converting ${usdAmount} USD to ${localCurrencyAmount} ${localCurrencyCode} for country ${countryDetection.countryCode}`,
+      );
 
       // Get payment gateway (default to palmpay if not specified)
       const gatewayId = purchaseDto.paymentGateway || "palmpay";
       const paymentMethod = purchaseDto.paymentMethod || "mobile_money";
-      const currency = purchaseDto.currency || "GHS";
 
       // Check if gateway is available
       if (!this.paymentGatewayRegistry.isGatewayAvailable(gatewayId)) {
@@ -1937,11 +2006,11 @@ export class TipsService {
         .substring(2, 9)
         .toUpperCase()}`;
 
-      // Create purchase record
+      // Create purchase record (store converted amount in local currency)
       const purchase = queryRunner.manager.create(Purchase, {
         tip: tip,
         buyer: buyer,
-        amount: tip.price,
+        amount: localCurrencyAmount,
         status: PurchaseStatusType.PENDING,
         paymentMethod: paymentMethod,
         paymentGateway: gatewayId,
@@ -1954,8 +2023,8 @@ export class TipsService {
       try {
         const paymentRequest = {
           paymentId: paymentId,
-          amount: parseFloat(tip.price.toString()),
-          currency: currency,
+          amount: localCurrencyAmount,
+          currency: localCurrencyCode,
           orderNumber: purchaseReference,
           paymentReference: purchaseReference,
           paymentMethod: paymentMethod,
@@ -1967,11 +2036,74 @@ export class TipsService {
           },
         };
 
+        // Get GlobalPaymentMethod and PaymentGateway entities for Payment record
+        // The paymentMethod should match the GlobalPaymentMethodType enum (e.g., "mobile_money")
+        const globalPaymentMethod = await queryRunner.manager.findOne(
+          GlobalPaymentMethod,
+          {
+            where: { type: paymentMethod as any },
+          },
+        );
+
+        if (!globalPaymentMethod) {
+          throw new BadRequestException(
+            `Payment method ${paymentMethod} not found`,
+          );
+        }
+
+        const paymentGateway = await queryRunner.manager.findOne(
+          PaymentGateway,
+          {
+            where: [{ id: gatewayId }, { name: gatewayId }],
+          },
+        );
+
+        if (!paymentGateway) {
+          throw new BadRequestException(
+            `Payment gateway ${gatewayId} not found`,
+          );
+        }
+
+        // Create Payment entity to track the actual payment gateway interaction
+        const payment = queryRunner.manager.create(Payment, {
+          type: PaymentType.TIP_PURCHASE,
+          purchase: savedPurchase,
+          purchaseId: savedPurchase.id,
+          orderNumber: purchaseReference,
+          amount: localCurrencyAmount,
+          globalPaymentMethod: globalPaymentMethod,
+          globalPaymentMethodId: globalPaymentMethod.id,
+          status: PaymentStatus.PENDING,
+          paymentReference: purchaseReference,
+          paymentGateway: paymentGateway,
+          paymentGatewayId: paymentGateway.id,
+          currency: localCurrencyCode,
+          checkoutUrl: null, // Will be updated after payment initiation
+          responseData: null, // Will store payment gateway response
+        });
+
+        // Initiate payment with gateway
         const paymentResponse =
           await this.paymentGatewayRegistry.initiatePayment(
             gatewayId,
             paymentRequest,
           );
+
+        // Update payment with gateway response
+        payment.providerTransactionId = paymentResponse.transactionId;
+        payment.checkoutUrl = paymentResponse.checkoutUrl;
+        payment.responseData = {
+          success: true,
+          message: paymentResponse.message || "Payment initiated successfully",
+          transactionId: paymentResponse.transactionId,
+          data: {
+            checkoutUrl: paymentResponse.checkoutUrl,
+            transactionId: paymentResponse.transactionId,
+          },
+        };
+
+        // Save payment entity
+        const savedPayment = await queryRunner.manager.save(Payment, payment);
 
         // Update purchase with payment details
         savedPurchase.paymentReference =
@@ -1982,12 +2114,12 @@ export class TipsService {
         await queryRunner.commitTransaction();
         transactionCommitted = true;
 
-        // Map to response DTO
+        // Map to response DTO (return converted amount in local currency)
         const response: PurchaseTipResponseDto = {
           id: savedPurchase.id,
           tipId: tip.id,
           buyerId: buyer.id,
-          amount: parseFloat(tip.price.toString()),
+          amount: localCurrencyAmount,
           status: savedPurchase.status,
           paymentReference: savedPurchase.paymentReference,
           paymentMethod: savedPurchase.paymentMethod,
