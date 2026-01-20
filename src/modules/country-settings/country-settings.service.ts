@@ -53,8 +53,8 @@ export class CountrySettingsService {
     });
 
     // Map payment methods to response DTOs with proper status logic
-    const paymentMethodDtos: PaymentMethodResponseDto[] =
-      paymentMethods.map((pm) => {
+    const paymentMethodDtos: PaymentMethodResponseDto[] = paymentMethods.map(
+      (pm) => {
         let status: "active" | "inactive" = pm.enabled ? "active" : "inactive";
 
         // If payment method has a global payment method, check if it's enabled
@@ -72,7 +72,8 @@ export class CountrySettingsService {
           status,
           type: pm.type,
         };
-      });
+      },
+    );
 
     // Fetch all fees for this country
     const fees = await this.feeRepository.find({

@@ -319,26 +319,72 @@ export class PaymentGatewayRegistryService implements OnModuleInit {
     gatewayId: string,
     request: PaymentRequest,
   ): Promise<PaymentResponse> {
+    this.logger.log(
+      `=== PaymentGatewayRegistry.initiatePayment called ===`,
+    );
+    this.logger.log(`Gateway ID: ${gatewayId}`);
+    this.logger.log(`Request: ${JSON.stringify(request, null, 2)}`);
+    // eslint-disable-next-line no-console
+    console.log(
+      `=== PaymentGatewayRegistry.initiatePayment called ===`,
+    );
+    // eslint-disable-next-line no-console
+    console.log(`Gateway ID: ${gatewayId}`);
+    // eslint-disable-next-line no-console
+    console.log(`Request: ${JSON.stringify(request, null, 2)}`);
+
     const gateway = this.getGateway(gatewayId);
+    this.logger.log(`Got gateway: ${gateway.getGatewayName()}`);
+    // eslint-disable-next-line no-console
+    console.log(`Got gateway: ${gateway.getGatewayName()}`);
+
     const supportedMethods = gateway.getSupportedPaymentMethods();
+    this.logger.log(`Supported methods: ${supportedMethods.join(", ")}`);
+    // eslint-disable-next-line no-console
+    console.log(`Supported methods: ${supportedMethods.join(", ")}`);
+
     if (!supportedMethods.includes(request.paymentMethod)) {
+      this.logger.error(
+        `Payment method ${request.paymentMethod} not supported by gateway ${gatewayId}`,
+      );
       throw new BadRequestException(
         `Payment method ${request.paymentMethod} not supported by gateway ${gatewayId}`,
       );
     }
+
     const supportedCurrencies = gateway.getSupportedCurrencies();
+    this.logger.log(`Supported currencies: ${supportedCurrencies.join(", ")}`);
+    // eslint-disable-next-line no-console
+    console.log(`Supported currencies: ${supportedCurrencies.join(", ")}`);
+
     if (!supportedCurrencies.includes(request.currency)) {
+      this.logger.error(
+        `Currency ${request.currency} not supported by gateway ${gatewayId}`,
+      );
       throw new BadRequestException(
         `Currency ${request.currency} not supported by gateway ${gatewayId}`,
       );
     }
+
     try {
+      this.logger.log(`Calling gateway.initiatePayment(...)`);
+      // eslint-disable-next-line no-console
+      console.log(`Calling gateway.initiatePayment(...)`);
       const response = await gateway.initiatePayment(request);
+      this.logger.log(`Gateway returned response: ${JSON.stringify(response, null, 2)}`);
+      // eslint-disable-next-line no-console
+      console.log(`Gateway returned response: ${JSON.stringify(response, null, 2)}`);
       return response;
     } catch (error) {
       this.logger.error(
         `Payment initiation failed with gateway ${gatewayId}: ${error.message}`,
       );
+      // eslint-disable-next-line no-console
+      console.error(
+        `Payment initiation failed with gateway ${gatewayId}: ${error.message}`,
+      );
+      // eslint-disable-next-line no-console
+      console.error(`Error stack:`, error.stack);
       throw error;
     }
   }

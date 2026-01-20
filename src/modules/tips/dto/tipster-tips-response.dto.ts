@@ -10,7 +10,10 @@ export class TipsterTipDto {
   @ApiProperty({ example: 4.99 })
   price: number;
 
-  @ApiProperty({ example: "won", enum: ["pending", "won", "lost", "void", "cancelled"] })
+  @ApiProperty({
+    example: "won",
+    enum: ["pending", "won", "lost", "void", "cancelled"],
+  })
   status: string;
 
   @ApiProperty({ example: "92%" })

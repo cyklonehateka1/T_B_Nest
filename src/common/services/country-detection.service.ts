@@ -11,7 +11,9 @@ export interface CountryDetectionResult {
 export class CountryDetectionService {
   private readonly logger = new Logger(CountryDetectionService.name);
 
-  async detectCountryFromIP(ipAddress: string): Promise<CountryDetectionResult> {
+  async detectCountryFromIP(
+    ipAddress: string,
+  ): Promise<CountryDetectionResult> {
     // Handle localhost and private IPs
     const privateIPs = [
       "127.0.0.1",

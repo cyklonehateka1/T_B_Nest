@@ -212,9 +212,27 @@ export class PalmpayService extends PaymentGatewayBase {
     );
   }
   async initiatePayment(request: PaymentRequest): Promise<PaymentResponse> {
+    this.logger.log(`=== PalmpayService.initiatePayment called ===`);
+    this.logger.log(`Request: ${JSON.stringify(request, null, 2)}`);
+    // eslint-disable-next-line no-console
+    console.log(`=== PalmpayService.initiatePayment called ===`);
+    // eslint-disable-next-line no-console
+    console.log(`Request: ${JSON.stringify(request, null, 2)}`);
+
     try {
       if (request.paymentMethod === "mobile_money") {
-        return await this.initiateMobileMoneyPayment(request);
+        this.logger.log(`Calling initiateMobileMoneyPayment(...)`);
+        // eslint-disable-next-line no-console
+        console.log(`Calling initiateMobileMoneyPayment(...)`);
+        const result = await this.initiateMobileMoneyPayment(request);
+        this.logger.log(
+          `initiateMobileMoneyPayment returned: ${JSON.stringify(result, null, 2)}`,
+        );
+        // eslint-disable-next-line no-console
+        console.log(
+          `initiateMobileMoneyPayment returned: ${JSON.stringify(result, null, 2)}`,
+        );
+        return result;
       } else {
         throw new BadRequestException(
           `Unsupported payment method: ${request.paymentMethod}. Palmpay only supports mobile_money`,
@@ -222,6 +240,11 @@ export class PalmpayService extends PaymentGatewayBase {
       }
     } catch (error) {
       this.logger.error(`Palmpay payment initiation failed: ${error.message}`);
+      this.logger.error(`Error stack: ${error.stack}`);
+      // eslint-disable-next-line no-console
+      console.error(`Palmpay payment initiation failed: ${error.message}`);
+      // eslint-disable-next-line no-console
+      console.error(`Error stack: ${error.stack}`);
       return {
         success: false,
         transactionId: "",
@@ -691,19 +714,16 @@ export class PalmpayService extends PaymentGatewayBase {
   private async initiateMobileMoneyPayment(
     request: PaymentRequest,
   ): Promise<PaymentResponse> {
-    if (
-      !request.additionalData ||
-      !isMobileMoneyPaymentData(request.additionalData)
-    ) {
-      throw new BadRequestException(
-        "Mobile money payment requires accountName, accountNumber, and network",
-      );
-    }
+    // For tip purchases, we don't require account details upfront
+    // Palmpay's redirect mode will handle payment collection
+    // If additionalData is provided, we can use it, but it's not required
+
     const amountInCents = Math.round(request.amount * 100);
     const appUrl = this.configService.get<string>("ADMIN_API_BASEURL");
     if (!appUrl) {
       throw new Error("ADMIN_API_BASEURL environment variable is required");
     }
+
     const generateNonce = (length = 32): string => {
       const chars =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -713,6 +733,20 @@ export class PalmpayService extends PaymentGatewayBase {
       }
       return result;
     };
+
+    // Determine the context from additionalData
+    const isTipPurchase = request.additionalData?.tipId !== undefined;
+    const tipTitle = request.additionalData?.tipTitle || "Tip/Prediction";
+    const purchaseId =
+      request.additionalData?.purchaseId || request.orderNumber;
+
+    // Set callback URL based on context
+    // For tip purchases: redirect to tip purchase success page
+    // For orders (legacy): redirect to orders page
+    const callBackUrl = isTipPurchase
+      ? `${this.frontendBaseUrl}/tips/${request.additionalData.tipId}/purchase/success?purchaseId=${purchaseId}`
+      : `${this.frontendBaseUrl}/orders`;
+
     const palmpayRequest: PalmpayCreateOrderRequest = {
       requestTime: Date.now(),
       version: "V1.1",
@@ -721,17 +755,44 @@ export class PalmpayService extends PaymentGatewayBase {
       amount: amountInCents,
       currency: request.currency,
       notifyUrl: `${appUrl}/webhooks/palmpay/mobile-money`,
-      callBackUrl: `${this.frontendBaseUrl}/orders`,
+      callBackUrl: callBackUrl,
       productType: "mmo",
       accessMode: "redirect",
-      title: `Payment for order ${request.orderNumber}`,
-      description: `Payment for order ${request.orderNumber}`,
+      title: isTipPurchase
+        ? `Payment for ${tipTitle}`
+        : `Payment for order ${request.orderNumber}`,
+      description: isTipPurchase
+        ? `Purchase tip/prediction: ${tipTitle}`
+        : `Payment for order ${request.orderNumber}`,
     };
     try {
+      // Log request details
+      this.logger.log("=== Palmpay Create Order Request ===");
+      this.logger.log("Endpoint: /api/v2/payment/merchant/createorder");
+      this.logger.log(
+        "Request Payload:",
+        JSON.stringify(palmpayRequest, null, 2),
+      );
+      // eslint-disable-next-line no-console
+      console.log("=== Palmpay Create Order Request ===");
+      // eslint-disable-next-line no-console
+      console.log("Endpoint: /api/v2/payment/merchant/createorder");
+      // eslint-disable-next-line no-console
+      console.log("Request Payload:", JSON.stringify(palmpayRequest, null, 2));
+
       const response = await this.makeApiRequest(
         "/api/v2/payment/merchant/createorder",
         palmpayRequest,
       );
+
+      // Log response details
+      this.logger.log("=== Palmpay Create Order Response ===");
+      this.logger.log("Response:", JSON.stringify(response, null, 2));
+      // eslint-disable-next-line no-console
+      console.log("=== Palmpay Create Order Response ===");
+      // eslint-disable-next-line no-console
+      console.log("Response:", JSON.stringify(response, null, 2));
+
       if (!response.success) {
         const errorMsg = response.message || "Palmpay API request failed";
         this.logger.error("Palmpay API request failed:", {
@@ -810,6 +871,7 @@ export class PalmpayService extends PaymentGatewayBase {
       throw error;
     }
   }
+
   private formatPrivateKey(key: string): string {
     const PEM_BEGIN = "-----BEGIN PRIVATE KEY-----\n";
     const PEM_END = "\n-----END PRIVATE KEY-----";
@@ -822,6 +884,7 @@ export class PalmpayService extends PaymentGatewayBase {
     }
     return formattedKey;
   }
+
   private formatPublicKey(key: string): string {
     const PEM_BEGIN = "-----BEGIN PUBLIC KEY-----\n";
     const PEM_END = "\n-----END PUBLIC KEY-----";
@@ -834,6 +897,7 @@ export class PalmpayService extends PaymentGatewayBase {
     }
     return formattedKey;
   }
+
   async handleVirtualAccountWebhook(
     request: WebhookRequest,
   ): Promise<WebhookResponse> {
@@ -1016,6 +1080,7 @@ export class PalmpayService extends PaymentGatewayBase {
       throw error;
     }
   }
+
   private verifyWebhookSignature(
     payload:
       | PalmpayMobileMoneyWebhookPayload
@@ -1065,6 +1130,7 @@ export class PalmpayService extends PaymentGatewayBase {
       return false;
     }
   }
+
   /**
    * Query bank list from Palmpay for a specific country
    * @param currency Currency code (GHS, NGN, TZS, KES) - used to determine country code
@@ -1233,21 +1299,53 @@ export class PalmpayService extends PaymentGatewayBase {
     method: "GET" | "POST" = "POST",
   ): Promise<PalmpayApiResponse> {
     try {
+      // Build query string for signature
+      // Step 1: Convert body to query string (matching Postman script)
+      // Sort by keys and format as key=value, join with &
+      // Note: Don't filter undefined/null - giftbank backend includes all properties
       const queryString = Object.entries(data)
-        .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
-        .map(([key, value]) => `${key}=${String(value)}`)
-        .join("&");
+        .sort(([keyA], [keyB]) => keyA.localeCompare(keyB)) // Sort by keys
+        .map(([key, value]) => `${key}=${String(value)}`) // Convert to key=value format
+        .join("&"); // Join with '&'
+
+      this.logger.log(`=== Signature Generation ===`);
+      this.logger.log(`Query String (sorted): ${queryString}`);
+      // eslint-disable-next-line no-console
+      console.log(`=== Signature Generation ===`);
+      // eslint-disable-next-line no-console
+      console.log(`Query String (sorted): ${queryString}`);
+
+      // Generate MD5 hash
       const md5Str = crypto
         .createHash("md5")
         .update(queryString)
         .digest("hex")
         .toUpperCase()
         .trim();
+
+      this.logger.log(`MD5 Hash: ${md5Str}`);
+      // eslint-disable-next-line no-console
+      console.log(`MD5 Hash: ${md5Str}`);
+
+      // Format private key
       const formattedPrivateKey = this.formatPrivateKey(this.privateKey);
+      this.logger.debug(
+        `Private key formatted (length: ${formattedPrivateKey.length})`,
+      );
+      // eslint-disable-next-line no-console
+      console.log(
+        `Private key formatted (length: ${formattedPrivateKey.length})`,
+      );
+
+      // Sign the MD5 hash
       const signer = crypto.createSign("RSA-SHA1");
       signer.update(md5Str);
       signer.end();
       const signature = signer.sign(formattedPrivateKey, "base64");
+
+      this.logger.log(`Generated Signature: ${signature}`);
+      // eslint-disable-next-line no-console
+      console.log(`Generated Signature: ${signature}`);
       const countryCodeMap: Record<string, string> = {
         GHS: "GH",
         NGN: "NG",
@@ -1267,10 +1365,48 @@ export class PalmpayService extends PaymentGatewayBase {
         },
         timeout: 30000,
       };
+
+      // Log request headers and payload
+      this.logger.log("=== Palmpay API Request ===");
+      this.logger.log(`Method: ${method}`);
+      this.logger.log(`URL: ${this.baseUrl}${endpoint}`);
+      this.logger.log("Headers:", JSON.stringify(config.headers, null, 2));
+      this.logger.log("Payload:", JSON.stringify(data, null, 2));
+      // eslint-disable-next-line no-console
+      console.log("=== Palmpay API Request ===");
+      // eslint-disable-next-line no-console
+      console.log(`Method: ${method}`);
+      // eslint-disable-next-line no-console
+      console.log(`URL: ${this.baseUrl}${endpoint}`);
+      // eslint-disable-next-line no-console
+      console.log("Headers:", JSON.stringify(config.headers, null, 2));
+      // eslint-disable-next-line no-console
+      console.log("Payload:", JSON.stringify(data, null, 2));
+
       const response: AxiosResponse =
         method === "GET"
           ? await axios.get(`${this.baseUrl}${endpoint}`, config)
           : await axios.post(`${this.baseUrl}${endpoint}`, data, config);
+
+      // Log response details
+      this.logger.log("=== Palmpay API Response ===");
+      this.logger.log(`Status: ${response.status}`);
+      this.logger.log(
+        "Response Headers:",
+        JSON.stringify(response.headers, null, 2),
+      );
+      this.logger.log("Response Data:", JSON.stringify(response.data, null, 2));
+      // eslint-disable-next-line no-console
+      console.log("=== Palmpay API Response ===");
+      // eslint-disable-next-line no-console
+      console.log(`Status: ${response.status}`);
+      // eslint-disable-next-line no-console
+      console.log(
+        "Response Headers:",
+        JSON.stringify(response.headers, null, 2),
+      );
+      // eslint-disable-next-line no-console
+      console.log("Response Data:", JSON.stringify(response.data, null, 2));
       if (
         response.data?.respCode &&
         response.data.respCode !== "00000" &&
@@ -1317,6 +1453,7 @@ export class PalmpayService extends PaymentGatewayBase {
       }
     }
   }
+
   private async sendNotificationsForWebhook(
     payment: Payment,
     webhookStatus: string,
@@ -1376,6 +1513,7 @@ export class PalmpayService extends PaymentGatewayBase {
       );
     }
   }
+
   private async sendAdminWebhookForCompletedPayment(
     purchase: Purchase,
     payment: Payment,

@@ -16,7 +16,8 @@ export class PaymentMethodResponseDto {
 
   @ApiProperty({
     example: "active",
-    description: "Payment method status (active or inactive). Inactive if global payment method is disabled.",
+    description:
+      "Payment method status (active or inactive). Inactive if global payment method is disabled.",
     enum: ["active", "inactive"],
   })
   status: "active" | "inactive";

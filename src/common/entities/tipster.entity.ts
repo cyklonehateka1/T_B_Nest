@@ -81,7 +81,6 @@ export class Tipster {
   })
   successRate: number;
 
-
   @Column({
     name: "rating",
     type: "decimal",
