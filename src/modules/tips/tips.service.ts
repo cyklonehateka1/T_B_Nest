@@ -17,6 +17,7 @@ import {
   Or,
   DataSource,
   In,
+  QueryFailedError,
 } from "typeorm";
 import { Tip } from "../../common/entities/tip.entity";
 import { TipStatusType } from "../../common/enums/tip-status-type.enum";
@@ -52,10 +53,7 @@ import { PurchaseTipResponseDto } from "./dto/purchase-tip-response.dto";
 import { PaymentGatewayRegistryService } from "../payments/gateways/payment-gateway-registry.service";
 import { CountryDetectionService } from "../../common/services/country-detection.service";
 import { CountrySettings } from "../../common/entities/country-settings.entity";
-import {
-  Payment,
-  PaymentStatus,
-} from "../../common/entities/payment.entity";
+import { Payment, PaymentStatus } from "../../common/entities/payment.entity";
 import { PaymentType } from "../../common/enums/payment-type.enum";
 import { GlobalPaymentMethod } from "../../common/entities/global-payment-method.entity";
 import { PaymentGateway } from "../../common/entities/payment-gateway.entity";
@@ -1922,12 +1920,72 @@ export class TipsService {
           tip: { id: tipId },
           buyer: { id: userId },
         },
+        relations: ["tip"],
       });
 
       if (existingPurchase) {
         if (existingPurchase.status === PurchaseStatusType.COMPLETED) {
           throw new BadRequestException("You have already purchased this tip");
         } else if (existingPurchase.status === PurchaseStatusType.PENDING) {
+          // Check if there's an existing payment for this purchase (idempotency)
+          const existingPayment = await queryRunner.manager.findOne(
+            Payment,
+            {
+              where: {
+                purchaseId: existingPurchase.id,
+                type: PaymentType.TIP_PURCHASE,
+              },
+              order: { createdAt: "DESC" },
+            },
+          );
+
+          if (existingPayment) {
+            // Return existing payment information (idempotency)
+            if (existingPayment.status === PaymentStatus.PENDING) {
+              this.logger.log(
+                `Returning existing pending payment ${existingPayment.id} for purchase ${existingPurchase.id}`,
+              );
+
+              // Commit any pending transaction before returning
+              if (queryRunner.isTransactionActive) {
+                await queryRunner.commitTransaction();
+                transactionCommitted = true;
+              }
+
+              // If checkoutUrl is missing, we need to re-initiate payment
+              if (!existingPayment.checkoutUrl) {
+                this.logger.warn(
+                  `Existing payment ${existingPayment.id} missing checkoutUrl. Payment may not have been properly initiated.`,
+                );
+                // Don't return - let the flow continue to create a new payment
+                throw new BadRequestException(
+                  "Existing payment found but checkout URL is missing. Please try again.",
+                );
+              }
+
+              return {
+                id: existingPurchase.id,
+                tipId: tip.id,
+                buyerId: buyer.id,
+                amount: parseFloat(existingPayment.amount.toString()),
+                status: existingPurchase.status,
+                paymentReference:
+                  existingPayment.providerTransactionId ||
+                  existingPayment.paymentReference,
+                paymentMethod: existingPurchase.paymentMethod,
+                paymentGateway: existingPurchase.paymentGateway,
+                checkoutUrl: existingPayment.checkoutUrl,
+                transactionId: existingPayment.providerTransactionId || undefined,
+                message: "Payment already initiated. Returning existing payment.",
+              };
+            } else if (existingPayment.status === PaymentStatus.COMPLETED) {
+              // Payment completed but purchase still pending - this is unusual
+              this.logger.warn(
+                `Payment ${existingPayment.id} is completed but purchase ${existingPurchase.id} is still pending`,
+              );
+            }
+          }
+
           throw new BadRequestException(
             "You already have a pending purchase for this tip",
           );
@@ -1943,9 +2001,8 @@ export class TipsService {
       }
 
       // Detect country from IP address
-      const countryDetection = await this.countryDetectionService.detectCountryFromIP(
-        ipAddress,
-      );
+      const countryDetection =
+        await this.countryDetectionService.detectCountryFromIP(ipAddress);
 
       // Get country settings from database
       const countrySettings = await queryRunner.manager.findOne(
@@ -1972,7 +2029,7 @@ export class TipsService {
       }
 
       // Convert USD amount to local currency
-      // The localCurrencyToUsdRate appears to be stored as "USD to local" 
+      // The localCurrencyToUsdRate appears to be stored as "USD to local"
       // (how many local currency units per 1 USD), despite the entity comment.
       // Example: If rate = 10.8, then 1 USD = 10.8 GHS
       // So to convert USD to local: localCurrency = USD * rate
@@ -1996,15 +2053,96 @@ export class TipsService {
         );
       }
 
-      // Generate purchase reference
-      const purchaseReference = `TIP-${Date.now()}-${Math.random()
-        .toString(36)
-        .substring(2, 9)
-        .toUpperCase()}`;
+      // Generate unique purchase reference (idempotency-safe)
+      // Use idempotency key if provided, otherwise generate unique reference
+      const purchaseReference = purchaseDto.idempotencyKey
+        ? `TIP-${purchaseDto.idempotencyKey}`
+        : `TIP-${Date.now()}-${Math.random()
+            .toString(36)
+            .substring(2, 9)
+            .toUpperCase()}-${userId.substring(0, 8)}`;
       const paymentId = `PAY-${Date.now()}-${Math.random()
         .toString(36)
         .substring(2, 9)
         .toUpperCase()}`;
+
+      // Check for existing payment with same orderNumber (idempotency check)
+      // Use repository (separate connection) to avoid transaction conflicts
+      // Do this BEFORE creating purchase to avoid wasted work
+      const existingPaymentByOrder = await this.paymentRepository.findOne({
+        where: {
+          orderNumber: purchaseReference,
+          type: PaymentType.TIP_PURCHASE,
+        },
+      });
+
+      if (existingPaymentByOrder) {
+        // Payment already exists with this orderNumber
+        if (existingPaymentByOrder.status === PaymentStatus.PENDING) {
+          // Return existing pending payment (idempotency)
+          this.logger.log(
+            `Returning existing pending payment ${existingPaymentByOrder.id} for orderNumber ${purchaseReference}`,
+          );
+
+          const existingPurchaseForPayment =
+            await this.purchaseRepository.findOne({
+              where: { id: existingPaymentByOrder.purchaseId },
+            });
+
+          if (!existingPurchaseForPayment) {
+            // Rollback transaction before throwing error
+            if (queryRunner.isTransactionActive) {
+              await queryRunner.rollbackTransaction();
+              transactionCommitted = false;
+            }
+            throw new BadRequestException(
+              "Payment exists but associated purchase not found",
+            );
+          }
+
+          // Rollback the current transaction since we're returning existing data
+          if (queryRunner.isTransactionActive) {
+            await queryRunner.rollbackTransaction();
+            transactionCommitted = false;
+          }
+
+          // If checkoutUrl is missing, we need to re-initiate payment
+          if (!existingPaymentByOrder.checkoutUrl) {
+            this.logger.warn(
+              `Existing payment ${existingPaymentByOrder.id} missing checkoutUrl. Payment may not have been properly initiated.`,
+            );
+            // Don't return - let the flow continue to create a new payment
+            throw new BadRequestException(
+              "Existing payment found but checkout URL is missing. Please try again.",
+            );
+          }
+
+          return {
+            id: existingPurchaseForPayment.id,
+            tipId: tip.id,
+            buyerId: buyer.id,
+            amount: parseFloat(existingPaymentByOrder.amount.toString()),
+            status: existingPurchaseForPayment.status,
+            paymentReference:
+              existingPaymentByOrder.providerTransactionId ||
+              existingPaymentByOrder.paymentReference,
+            paymentMethod: existingPurchaseForPayment.paymentMethod,
+            paymentGateway: existingPurchaseForPayment.paymentGateway,
+            checkoutUrl: existingPaymentByOrder.checkoutUrl,
+            transactionId: existingPaymentByOrder.providerTransactionId || undefined,
+            message: "Payment already initiated. Returning existing payment.",
+          };
+        } else if (existingPaymentByOrder.status === PaymentStatus.COMPLETED) {
+          // Rollback transaction before throwing error
+          if (queryRunner.isTransactionActive) {
+            await queryRunner.rollbackTransaction();
+            transactionCommitted = false;
+          }
+          throw new BadRequestException(
+            "Payment for this order has already been completed",
+          );
+        }
+      }
 
       // Create purchase record (store converted amount in local currency)
       const purchase = queryRunner.manager.create(Purchase, {
@@ -2021,21 +2159,6 @@ export class TipsService {
 
       // Initiate payment
       try {
-        const paymentRequest = {
-          paymentId: paymentId,
-          amount: localCurrencyAmount,
-          currency: localCurrencyCode,
-          orderNumber: purchaseReference,
-          paymentReference: purchaseReference,
-          paymentMethod: paymentMethod,
-          additionalData: {
-            tipId: tip.id,
-            tipTitle: tip.title,
-            buyerId: buyer.id,
-            tipsterId: tip.tipster.id,
-          },
-        };
-
         // Get GlobalPaymentMethod and PaymentGateway entities for Payment record
         // The paymentMethod should match the GlobalPaymentMethodType enum (e.g., "mobile_money")
         const globalPaymentMethod = await queryRunner.manager.findOne(
@@ -2051,12 +2174,26 @@ export class TipsService {
           );
         }
 
-        const paymentGateway = await queryRunner.manager.findOne(
-          PaymentGateway,
-          {
-            where: [{ id: gatewayId }, { name: gatewayId }],
-          },
-        );
+        // Check if gatewayId is a UUID or a name
+        // UUID pattern: 8-4-4-4-12 hex characters
+        const uuidPattern =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const isUUID = uuidPattern.test(gatewayId);
+
+        // Query by ID if it's a UUID, otherwise query by name (case-insensitive)
+        let paymentGateway: PaymentGateway | null = null;
+        if (isUUID) {
+          paymentGateway = await queryRunner.manager.findOne(PaymentGateway, {
+            where: { id: gatewayId },
+          });
+        } else {
+          // Search by name - use case-insensitive search
+          // Normalize gatewayId to lowercase for matching (gateways are typically stored as lowercase)
+          const normalizedGatewayName = gatewayId.toLowerCase();
+          paymentGateway = await queryRunner.manager.findOne(PaymentGateway, {
+            where: { name: ILike(normalizedGatewayName) },
+          });
+        }
 
         if (!paymentGateway) {
           throw new BadRequestException(
@@ -2065,8 +2202,10 @@ export class TipsService {
         }
 
         // Create Payment entity to track the actual payment gateway interaction
+        // TIP_PURCHASE is a payin (money coming in), so isPayout = false
         const payment = queryRunner.manager.create(Payment, {
           type: PaymentType.TIP_PURCHASE,
+          isPayout: false, // Payin - money coming in from customer
           purchase: savedPurchase,
           purchaseId: savedPurchase.id,
           orderNumber: purchaseReference,
@@ -2082,28 +2221,218 @@ export class TipsService {
           responseData: null, // Will store payment gateway response
         });
 
+        // Save payment entity first (before gateway call) for idempotency
+        // This ensures we have a payment record even if gateway call fails
+        let savedPayment: Payment;
+        try {
+          savedPayment = await queryRunner.manager.save(Payment, payment);
+        } catch (saveError: any) {
+          // Check if this is a unique constraint violation (PostgreSQL error code 23505)
+          const isUniqueConstraintError =
+            saveError instanceof QueryFailedError &&
+            saveError.driverError?.code === "23505";
+          const isDuplicateKey =
+            saveError.code === "23505" ||
+            saveError.message?.includes("unique constraint") ||
+            saveError.message?.includes("duplicate key") ||
+            saveError.message?.includes("uk_payments_order_number");
+
+          // Handle unique constraint violation (idempotency)
+          if (isUniqueConstraintError || isDuplicateKey) {
+            // Transaction is aborted, need to rollback first before querying
+            try {
+              if (queryRunner.isTransactionActive) {
+                await queryRunner.rollbackTransaction();
+              }
+            } catch (rollbackError) {
+              // Rollback might fail if already rolled back, ignore
+            }
+            transactionCommitted = false;
+
+            // Query using repository (new connection) since transaction was rolled back
+            const existingPayment = await this.paymentRepository.findOne({
+              where: { orderNumber: purchaseReference },
+              relations: ["purchase"],
+            });
+
+            if (existingPayment && existingPayment.status === PaymentStatus.PENDING) {
+              // Return existing pending payment
+              this.logger.log(
+                `Duplicate payment request detected (orderNumber: ${purchaseReference}), returning existing payment ${existingPayment.id}`,
+              );
+
+              const existingPurchaseForPayment =
+                await this.purchaseRepository.findOne({
+                  where: { id: existingPayment.purchaseId },
+                });
+
+              if (!existingPurchaseForPayment) {
+                throw new BadRequestException(
+                  "Payment exists but associated purchase not found",
+                );
+              }
+
+              // If checkoutUrl is missing, we need to re-initiate payment
+              if (!existingPayment.checkoutUrl) {
+                this.logger.warn(
+                  `Existing payment ${existingPayment.id} missing checkoutUrl. Payment may not have been properly initiated.`,
+                );
+                // Don't return - let the flow continue to create a new payment
+                throw new BadRequestException(
+                  "Existing payment found but checkout URL is missing. Please try again.",
+                );
+              }
+
+              return {
+                id: existingPurchaseForPayment.id,
+                tipId: tip.id,
+                buyerId: buyer.id,
+                amount: parseFloat(existingPayment.amount.toString()),
+                status: existingPurchaseForPayment.status,
+                paymentReference:
+                  existingPayment.providerTransactionId ||
+                  existingPayment.paymentReference,
+                paymentMethod: existingPurchaseForPayment.paymentMethod,
+                paymentGateway: existingPurchaseForPayment.paymentGateway,
+                checkoutUrl: existingPayment.checkoutUrl,
+                transactionId: existingPayment.providerTransactionId || undefined,
+                message: "Payment already initiated. Returning existing payment.",
+              };
+            } else if (existingPayment && existingPayment.status === PaymentStatus.COMPLETED) {
+              throw new BadRequestException(
+                "Payment for this order has already been completed",
+              );
+            }
+            // If payment doesn't exist or has unexpected status, rethrow original error
+            this.logger.warn(
+              `Unique constraint error but existing payment not found or has unexpected status for orderNumber: ${purchaseReference}`,
+            );
+          }
+          // If error occurred and transaction is still active, rollback
+          if (queryRunner.isTransactionActive) {
+            try {
+              await queryRunner.rollbackTransaction();
+            } catch (rollbackError) {
+              // Ignore rollback errors
+            }
+            transactionCommitted = false;
+          }
+          throw saveError;
+        }
+
+        // Prepare payment request with all necessary data
+        const paymentRequest = {
+          paymentId: paymentId,
+          amount: localCurrencyAmount,
+          currency: localCurrencyCode,
+          orderNumber: purchaseReference,
+          paymentReference: purchaseReference,
+          paymentMethod: paymentMethod,
+          additionalData: {
+            tipId: tip.id,
+            tipTitle: tip.title,
+            buyerId: buyer.id,
+            tipsterId: tip.tipster.id,
+            purchaseId: savedPurchase.id,
+            paymentId: savedPayment.id,
+          },
+        };
+
         // Initiate payment with gateway
-        const paymentResponse =
-          await this.paymentGatewayRegistry.initiatePayment(
-            gatewayId,
-            paymentRequest,
+        this.logger.log(
+          `=== STARTING PAYMENT INITIATION ===`,
+        );
+        this.logger.log(
+          `Initiating payment with gateway ${gatewayId} for purchase ${savedPurchase.id}`,
+        );
+        this.logger.log(
+          `Payment request: ${JSON.stringify(paymentRequest, null, 2)}`,
+        );
+        // eslint-disable-next-line no-console
+        console.log(
+          `=== STARTING PAYMENT INITIATION ===`,
+        );
+        // eslint-disable-next-line no-console
+        console.log(
+          `Gateway ID: ${gatewayId}`,
+        );
+        // eslint-disable-next-line no-console
+        console.log(
+          `Purchase ID: ${savedPurchase.id}`,
+        );
+        // eslint-disable-next-line no-console
+        console.log(
+          `Payment request: ${JSON.stringify(paymentRequest, null, 2)}`,
+        );
+
+        let paymentResponse;
+        try {
+          this.logger.log(
+            `Calling paymentGatewayRegistry.initiatePayment(${gatewayId}, ...)`,
+          );
+          // eslint-disable-next-line no-console
+          console.log(
+            `Calling paymentGatewayRegistry.initiatePayment(${gatewayId}, ...)`,
+          );
+          paymentResponse =
+            await this.paymentGatewayRegistry.initiatePayment(
+              gatewayId,
+              paymentRequest,
+            );
+          this.logger.log(
+            `Payment gateway registry returned response`,
+          );
+          // eslint-disable-next-line no-console
+          console.log(
+            `Payment gateway registry returned response`,
           );
 
+          this.logger.log(
+            `Payment initiated successfully. Response: ${JSON.stringify(paymentResponse)}`,
+          );
+
+          // Validate that checkoutUrl is present
+          if (!paymentResponse.checkoutUrl) {
+            this.logger.warn(
+              `Payment gateway ${gatewayId} did not return a checkoutUrl. Response: ${JSON.stringify(paymentResponse)}`,
+            );
+          } else {
+            this.logger.log(
+              `Checkout URL received: ${paymentResponse.checkoutUrl}`,
+            );
+          }
+        } catch (gatewayError) {
+          // If gateway call fails, update payment status and rethrow
+          this.logger.error(
+            `Payment gateway error: ${gatewayError.message}`,
+            gatewayError.stack,
+          );
+          savedPayment.status = PaymentStatus.FAILED;
+          savedPayment.errorMessage =
+            gatewayError.message || "Payment gateway error";
+          await queryRunner.manager.save(Payment, savedPayment);
+          throw gatewayError;
+        }
+
         // Update payment with gateway response
-        payment.providerTransactionId = paymentResponse.transactionId;
-        payment.checkoutUrl = paymentResponse.checkoutUrl;
-        payment.responseData = {
-          success: true,
+        savedPayment.providerTransactionId = paymentResponse.transactionId;
+        savedPayment.checkoutUrl = paymentResponse.checkoutUrl || null;
+        savedPayment.responseData = {
+          success: paymentResponse.success ?? true,
           message: paymentResponse.message || "Payment initiated successfully",
           transactionId: paymentResponse.transactionId,
           data: {
             checkoutUrl: paymentResponse.checkoutUrl,
             transactionId: paymentResponse.transactionId,
+            orderNumber: purchaseReference,
           },
         };
 
-        // Save payment entity
-        const savedPayment = await queryRunner.manager.save(Payment, payment);
+        // Save updated payment entity
+        await queryRunner.manager.save(Payment, savedPayment);
+        this.logger.debug(
+          `Payment entity updated with checkoutUrl: ${savedPayment.checkoutUrl}`,
+        );
 
         // Update purchase with payment details
         savedPurchase.paymentReference =
@@ -2115,6 +2444,10 @@ export class TipsService {
         transactionCommitted = true;
 
         // Map to response DTO (return converted amount in local currency)
+        // Ensure checkoutUrl is always returned if available
+        const checkoutUrlToReturn =
+          paymentResponse.checkoutUrl || savedPayment.checkoutUrl || undefined;
+
         const response: PurchaseTipResponseDto = {
           id: savedPurchase.id,
           tipId: tip.id,
@@ -2124,25 +2457,199 @@ export class TipsService {
           paymentReference: savedPurchase.paymentReference,
           paymentMethod: savedPurchase.paymentMethod,
           paymentGateway: savedPurchase.paymentGateway,
-          checkoutUrl: paymentResponse.checkoutUrl,
+          checkoutUrl: checkoutUrlToReturn,
           transactionId: paymentResponse.transactionId,
           message: paymentResponse.message || "Payment initiated successfully",
         };
 
+        // Validate that checkoutUrl is present (required for frontend redirect)
+        if (!response.checkoutUrl) {
+          const errorMsg = `Payment ${savedPayment.id} initiated but no checkoutUrl returned from gateway ${gatewayId}. Payment response: ${JSON.stringify(paymentResponse)}`;
+          this.logger.error(errorMsg);
+          // Throw error - checkoutUrl is required for mobile_money payments
+          throw new BadRequestException(
+            `Payment gateway did not return a checkout URL. Please try again or contact support if the issue persists.`,
+          );
+        } else {
+          this.logger.log(
+            `Purchase response includes checkoutUrl: ${response.checkoutUrl}`,
+          );
+        }
+
         this.logger.log(
           `Successfully initiated purchase ${savedPurchase.id} for tip ${tipId} by user ${userId}`,
         );
+        this.logger.debug(
+          `Returning purchase response: ${JSON.stringify(response)}`,
+        );
 
-        return response;
-      } catch (paymentError) {
-        // If payment fails, update purchase status to FAILED
-        savedPurchase.status = PurchaseStatusType.FAILED;
-        await queryRunner.manager.save(Purchase, savedPurchase);
-        await queryRunner.commitTransaction();
-        transactionCommitted = true;
+        // Return response before finally block releases queryRunner
+        // Store response in a variable to return it after cleanup
+        const finalResponse = response;
+        return finalResponse;
+      } catch (paymentError: any) {
+        // If payment fails, update payment and purchase status to FAILED
+        // Check if transaction error indicates it's aborted
+        const isTransactionAborted =
+          paymentError instanceof QueryFailedError &&
+          (paymentError.driverError?.code === "25P02" ||
+            paymentError.driverError?.code === "25000") ||
+          paymentError.message?.includes("aborted") ||
+          paymentError.code === "25P02" ||
+          paymentError.code === "25000";
+
+        // If transaction is aborted, use repository (separate connection) for updates
+        if (isTransactionAborted) {
+          this.logger.warn(
+            `Transaction aborted during payment initiation for purchase ${savedPurchase.id}, using repository for updates`,
+          );
+          try {
+            const failedPayment = await this.paymentRepository.findOne({
+              where: { purchaseId: savedPurchase.id },
+              order: { createdAt: "DESC" },
+            });
+
+            if (failedPayment) {
+              failedPayment.status = PaymentStatus.FAILED;
+              failedPayment.errorMessage =
+                paymentError.message || "Payment initiation failed";
+              await this.paymentRepository.save(failedPayment);
+            }
+
+            const purchaseToUpdate = await this.purchaseRepository.findOne({
+              where: { id: savedPurchase.id },
+            });
+            if (purchaseToUpdate) {
+              purchaseToUpdate.status = PurchaseStatusType.FAILED;
+              await this.purchaseRepository.save(purchaseToUpdate);
+            }
+            transactionCommitted = false;
+          } catch (updateError) {
+            this.logger.error(
+              `Failed to update payment/purchase status after transaction abort: ${updateError.message}`,
+            );
+          }
+        } else if (queryRunner.isTransactionActive) {
+          // Transaction is still active, try to update within transaction
+          // Wrap query in try-catch to handle potential transaction abort
+          try {
+            // Check if payment was created before error
+            let failedPayment: Payment | null = null;
+            try {
+              failedPayment = await queryRunner.manager.findOne(Payment, {
+                where: { purchaseId: savedPurchase.id },
+                order: { createdAt: "DESC" },
+              });
+            } catch (queryError: any) {
+              // If query fails due to transaction abort, use repository
+              if (
+                queryError.message?.includes("aborted") ||
+                queryError.code === "25P02" ||
+                (queryError instanceof QueryFailedError &&
+                  queryError.driverError?.code === "25P02")
+              ) {
+                this.logger.warn(
+                  `Transaction aborted during query, switching to repository`,
+                );
+                // Rollback and switch to repository
+                try {
+                  await queryRunner.rollbackTransaction();
+                } catch (rollbackError) {
+                  // Ignore rollback errors
+                }
+                transactionCommitted = false;
+
+                // Use repository for updates
+                failedPayment = await this.paymentRepository.findOne({
+                  where: { purchaseId: savedPurchase.id },
+                  order: { createdAt: "DESC" },
+                });
+                if (failedPayment) {
+                  failedPayment.status = PaymentStatus.FAILED;
+                  failedPayment.errorMessage =
+                    paymentError.message || "Payment initiation failed";
+                  await this.paymentRepository.save(failedPayment);
+                }
+                const purchaseToUpdate = await this.purchaseRepository.findOne({
+                  where: { id: savedPurchase.id },
+                });
+                if (purchaseToUpdate) {
+                  purchaseToUpdate.status = PurchaseStatusType.FAILED;
+                  await this.purchaseRepository.save(purchaseToUpdate);
+                }
+                // Exit early, don't try transaction manager
+                throw queryError;
+              }
+              throw queryError;
+            }
+
+            // If we got here, transaction is still valid
+            if (failedPayment) {
+              failedPayment.status = PaymentStatus.FAILED;
+              failedPayment.errorMessage =
+                paymentError.message || "Payment initiation failed";
+              await queryRunner.manager.save(Payment, failedPayment);
+            }
+
+            savedPurchase.status = PurchaseStatusType.FAILED;
+            await queryRunner.manager.save(Purchase, savedPurchase);
+            await queryRunner.commitTransaction();
+            transactionCommitted = true;
+          } catch (updateError: any) {
+            // If update fails (e.g., transaction aborted during update), rollback and use repository
+            const isAbortError =
+              updateError.message?.includes("aborted") ||
+              updateError.code === "25P02" ||
+              (updateError instanceof QueryFailedError &&
+                updateError.driverError?.code === "25P02");
+
+            if (queryRunner.isTransactionActive && !isAbortError) {
+              try {
+                await queryRunner.rollbackTransaction();
+              } catch (rollbackError) {
+                // Rollback might fail if already rolled back, ignore
+              }
+            }
+            transactionCommitted = false;
+
+            // Try to update using repository as fallback
+            if (isAbortError || !transactionCommitted) {
+              try {
+                const failedPayment = await this.paymentRepository.findOne({
+                  where: { purchaseId: savedPurchase.id },
+                  order: { createdAt: "DESC" },
+                });
+                if (failedPayment) {
+                  failedPayment.status = PaymentStatus.FAILED;
+                  failedPayment.errorMessage =
+                    paymentError.message || "Payment initiation failed";
+                  await this.paymentRepository.save(failedPayment);
+                }
+                const purchaseToUpdate = await this.purchaseRepository.findOne({
+                  where: { id: savedPurchase.id },
+                });
+                if (purchaseToUpdate) {
+                  purchaseToUpdate.status = PurchaseStatusType.FAILED;
+                  await this.purchaseRepository.save(purchaseToUpdate);
+                }
+              } catch (repoError) {
+                this.logger.error(
+                  `Failed to update payment/purchase using repository: ${repoError.message}`,
+                );
+              }
+            }
+
+            if (!isAbortError) {
+              this.logger.error(
+                `Failed to update payment/purchase status after error: ${updateError.message}`,
+              );
+            }
+          }
+        }
 
         this.logger.error(
           `Payment initiation failed for purchase ${savedPurchase.id}: ${paymentError.message}`,
+          paymentError.stack,
         );
 
         throw new BadRequestException(
@@ -2166,7 +2673,14 @@ export class TipsService {
 
       throw new InternalServerErrorException("Failed to purchase tip");
     } finally {
-      await queryRunner.release();
+      try {
+        await queryRunner.release();
+      } catch (releaseError) {
+        // Log but don't throw - response should already be sent
+        this.logger.warn(
+          `Error releasing query runner: ${releaseError.message}`,
+        );
+      }
     }
   }
 
@@ -2174,9 +2688,7 @@ export class TipsService {
     page: number = 0,
     size: number = 5,
   ): Promise<TopTipstersPageResponseDto> {
-    this.logger.log(
-      `Fetching top tipsters (page: ${page}, size: ${size})`,
-    );
+    this.logger.log(`Fetching top tipsters (page: ${page}, size: ${size})`);
 
     // Query tipsters with user relationship
     // Order by: 1) rating DESC, 2) topTipster DESC (true first), 3) successRate DESC, 4) name ASC
@@ -2282,7 +2794,7 @@ export class TipsService {
       tipster.user?.displayName ||
       `${tipster.user?.firstName || ""} ${tipster.user?.lastName || ""}`.trim() ||
       "Unknown Tipster";
-    
+
     const avatar = tipster.avatarUrl || tipster.user?.avatarUrl || null;
 
     const response: TipsterDetailsDto = {
@@ -2318,10 +2830,7 @@ export class TipsService {
       .createQueryBuilder("tip")
       .where("tip.tipster = :tipsterId", { tipsterId })
       .andWhere("tip.isPublished = :isPublished", { isPublished: true })
-      .orderBy(
-        "COALESCE(tip.publishedAt, tip.createdAt)",
-        "DESC",
-      )
+      .orderBy("COALESCE(tip.publishedAt, tip.createdAt)", "DESC")
       .getMany();
 
     const successRate = Number(tipster.successRate || 0);
@@ -2348,10 +2857,7 @@ export class TipsService {
       .createQueryBuilder("tip")
       .where("tip.tipster = :tipsterId", { tipsterId })
       .andWhere("tip.isPublished = :isPublished", { isPublished: true })
-      .orderBy(
-        "COALESCE(tip.publishedAt, tip.createdAt)",
-        "DESC",
-      )
+      .orderBy("COALESCE(tip.publishedAt, tip.createdAt)", "DESC")
       .getMany();
 
     let streak = 0;

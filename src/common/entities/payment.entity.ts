@@ -14,8 +14,11 @@ import {
   IsNumber,
   IsOptional,
   IsObject,
+  IsBoolean,
 } from "class-validator";
 import { Purchase } from "./purchase.entity";
+import { Escrow } from "./escrow.entity";
+import { User } from "./user.entity";
 import { GlobalPaymentMethod } from "./global-payment-method.entity";
 import { PaymentGateway } from "./payment-gateway.entity";
 import { PaymentType } from "../enums/payment-type.enum";
@@ -53,6 +56,9 @@ export interface PaymentResponseData {
 @Index("idx_payments_type", ["type"])
 @Index("idx_payments_status", ["status"])
 @Index("idx_payments_purchase_id", ["purchaseId"])
+@Index("idx_payments_escrow_id", ["escrowId"])
+@Index("idx_payments_recipient_user_id", ["recipientUserId"])
+@Index("idx_payments_is_payout", ["isPayout"])
 export class Payment {
   @PrimaryGeneratedColumn("uuid")
   id: string;
@@ -67,14 +73,56 @@ export class Payment {
   @IsEnum(PaymentType)
   type: PaymentType;
 
+  @Column({
+    name: "is_payout",
+    type: "boolean",
+    nullable: false,
+    default: false,
+    comment: "true = payout (money going out), false = payin (money coming in)",
+  })
+  @IsBoolean()
+  isPayout: boolean;
+
+  // Relationships to different entity types based on payment type
+  // TIP_PURCHASE -> purchase
+  // ESCROW_REFUND -> purchase (refunded purchase) and escrow (source of refund)
+  // TIPSTER_PAYOUT -> recipientUserId (tipster receiving payout)
+
   @ManyToOne(() => Purchase, { nullable: true })
-  @JoinColumn({ name: "purchaseId" })
+  @JoinColumn({
+    name: "purchaseId",
+    foreignKeyConstraintName: "fk_payments_purchase",
+  })
   purchase?: Purchase;
 
   @Column({ nullable: true })
   @IsOptional()
   @IsString()
   purchaseId?: string;
+
+  @ManyToOne(() => Escrow, { nullable: true })
+  @JoinColumn({
+    name: "escrowId",
+    foreignKeyConstraintName: "fk_payments_escrow",
+  })
+  escrow?: Escrow;
+
+  @Column({ nullable: true })
+  @IsOptional()
+  @IsString()
+  escrowId?: string;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({
+    name: "recipientUserId",
+    foreignKeyConstraintName: "fk_payments_recipient",
+  })
+  recipient?: User;
+
+  @Column({ nullable: true })
+  @IsOptional()
+  @IsString()
+  recipientUserId?: string;
 
   @Column()
   @IsString()

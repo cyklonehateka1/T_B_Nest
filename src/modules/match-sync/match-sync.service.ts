@@ -254,7 +254,7 @@ export class MatchSyncService {
         this.logger.warn("Match missing external ID, skipping");
         return null;
       }
-      let existingMatch = await queryRunner.manager.findOne(MatchData, {
+      const existingMatch = await queryRunner.manager.findOne(MatchData, {
         where: { externalId },
       });
       const match = existingMatch || queryRunner.manager.create(MatchData, {});

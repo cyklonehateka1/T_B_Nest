@@ -12,6 +12,7 @@ import {
   BadRequestException,
   HttpCode,
   HttpStatus,
+  Logger,
 } from "@nestjs/common";
 import { Request as ExpressRequest } from "express";
 import {
@@ -25,9 +26,7 @@ import {
 import { TipsService } from "./tips.service";
 import { TipsPageResponseDto } from "./dto/tips-page-response.dto";
 import { TipResponseDto } from "./dto/tip-response.dto";
-import {
-  TopTipstersPageResponseDto,
-} from "./dto/top-tipster-response.dto";
+import { TopTipstersPageResponseDto } from "./dto/top-tipster-response.dto";
 import { TipsterDetailsDto } from "./dto/tipster-details-response.dto";
 import { TipsterTipsResponseDto } from "./dto/tipster-tips-response.dto";
 import { TipEditingResponseDto } from "./dto/tip-editing-response.dto";
@@ -45,6 +44,8 @@ import { UserRoleType } from "../../common/enums/user-role-type.enum";
 @ApiTags("Tips")
 @Controller("tips")
 export class TipsController {
+  private readonly logger = new Logger(TipsController.name);
+
   constructor(private readonly tipsService: TipsService) {}
 
   @Get()
@@ -1061,7 +1062,7 @@ export class TipsController {
     return ApiResponseClass.success(tip, "Tip published successfully");
   }
 
-  @Post(":id/purchase")
+  @Post("purchase")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.CREATED)
@@ -1130,7 +1131,6 @@ export class TipsController {
     },
   })
   async purchaseTip(
-    @Param("id") tipId: string,
     @Body() purchaseDto: PurchaseTipDto,
     @Request() req: ExpressRequest & { user?: { id: string } },
   ): Promise<ApiResponseClass<PurchaseTipResponseDto>> {
@@ -1140,20 +1140,30 @@ export class TipsController {
       throw new Error("User ID not found in request");
     }
 
+    if (!purchaseDto.tipId) {
+      throw new BadRequestException("Tip ID is required in request body");
+    }
+
     // Extract IP address from request
     const ipAddress = this.extractUserIP(req);
 
     const purchase = await this.tipsService.purchaseTip(
-      tipId,
+      purchaseDto.tipId,
       userId,
       purchaseDto,
       ipAddress,
     );
 
-    return ApiResponseClass.success(
+    const apiResponse = ApiResponseClass.success(
       purchase,
       "Purchase initiated successfully",
     );
+
+    this.logger.debug(
+      `Purchase endpoint returning: ${JSON.stringify(apiResponse)}`,
+    );
+
+    return apiResponse;
   }
 
   private extractUserIP(req: ExpressRequest): string {

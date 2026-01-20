@@ -392,7 +392,7 @@ export class AuthService {
       });
       if (token) {
         try {
-          const decoded = this.jwtService.decode(token) as any;
+          const decoded = this.jwtService.decode(token);
           const expiresAt = decoded?.exp
             ? new Date(decoded.exp * 1000)
             : new Date(Date.now() + 60 * 60 * 1000);
@@ -416,7 +416,7 @@ export class AuthService {
       }
       if (refreshToken) {
         try {
-          const decoded = this.jwtService.decode(refreshToken) as any;
+          const decoded = this.jwtService.decode(refreshToken);
           const expiresAt = decoded?.exp
             ? new Date(decoded.exp * 1000)
             : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
