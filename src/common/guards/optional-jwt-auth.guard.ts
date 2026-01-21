@@ -17,7 +17,7 @@ export class OptionalJwtAuthGuard extends AuthGuard("jwt") {
   ): boolean | Promise<boolean> | Observable<boolean> {
     // Try to activate authentication, but catch errors to make it optional
     const result = super.canActivate(context);
-    
+
     // Handle different return types
     if (result instanceof Promise) {
       return result.catch(() => {
@@ -25,7 +25,7 @@ export class OptionalJwtAuthGuard extends AuthGuard("jwt") {
         return true;
       });
     }
-    
+
     if (result instanceof Observable) {
       return result.pipe(
         catchError(() => {
@@ -34,7 +34,7 @@ export class OptionalJwtAuthGuard extends AuthGuard("jwt") {
         }),
       );
     }
-    
+
     // If it's a boolean, return as is
     return result;
   }

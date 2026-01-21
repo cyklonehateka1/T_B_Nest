@@ -57,6 +57,15 @@ export class PaymentStatusScheduler implements OnModuleInit {
   }
 
   onModuleInit() {
+    this.logger.log("=== PaymentStatusScheduler Initialization ===");
+    this.logger.log(`PAYMENT_STATUS_CRON_ENABLED: ${this.cronEnabled}`);
+    this.logger.log(`PAYMENT_STATUS_CHECK_ENABLED: ${this.checkEnabled}`);
+    this.logger.log(`PAYMENT_STATUS_CLEANUP_ENABLED: ${this.cleanupEnabled}`);
+    this.logger.log(
+      `Max payment age for checking: ${this.maxPaymentAgeMinutes} minutes`,
+    );
+    this.logger.log(`Cleanup age threshold: ${this.cleanupAgeHours} hours`);
+
     if (!this.cronEnabled) {
       this.logger.warn(
         "Payment status cron is disabled (PAYMENT_STATUS_CRON_ENABLED=false). All cron jobs are deactivated.",
@@ -64,37 +73,73 @@ export class PaymentStatusScheduler implements OnModuleInit {
     } else {
       if (this.checkEnabled) {
         this.logger.log(
-          `Payment status check enabled - checking payments created within last ${this.maxPaymentAgeMinutes} minutes`,
+          `✓ Payment status check enabled - checking payments created within last ${this.maxPaymentAgeMinutes} minutes`,
+        );
+        this.logger.log(
+          `  Cron job will run every 6 hours: @Cron("0 */6 * * *")`,
+        );
+      } else {
+        this.logger.warn(
+          "Payment status check is disabled (PAYMENT_STATUS_CHECK_ENABLED=false)",
         );
       }
       if (this.cleanupEnabled) {
         this.logger.log(
-          `Payment cleanup enabled - marking pending payments older than ${this.cleanupAgeHours} hours as failed`,
+          `✓ Payment cleanup enabled - marking pending payments older than ${this.cleanupAgeHours} hours as failed`,
+        );
+        this.logger.log(
+          `  Cleanup cron job will run daily at 2 AM: @Cron("0 2 * * *")`,
+        );
+      } else {
+        this.logger.warn(
+          "Payment cleanup is disabled (PAYMENT_STATUS_CLEANUP_ENABLED=false)",
         );
       }
     }
+    this.logger.log("=== PaymentStatusScheduler Initialization Complete ===");
   }
 
   /**
-   * Check pending payments every 2 minutes
+   * Test cron to verify cron system is working
+   * Runs every minute and logs a message
+   */
+  @Cron("* * * * *")
+  async testCronJob(): Promise<void> {
+    this.logger.log(
+      `[TEST CRON] PaymentStatusScheduler cron system is working! (runs every minute)`,
+    );
+  }
+
+  /**
+   * Check pending payments every 6 hours
    * Only processes payments that are not too old
    */
-  @Cron("*/2 * * * *")
+  @Cron("0 */6 * * *")
   async checkPendingPayments(): Promise<void> {
+    this.logger.debug(
+      `[CRON] checkPendingPayments called - cronEnabled: ${this.cronEnabled}, checkEnabled: ${this.checkEnabled}`,
+    );
+
     if (!this.cronEnabled || !this.checkEnabled) {
+      this.logger.debug(
+        "[CRON] checkPendingPayments skipped - cron or check is disabled",
+      );
       return;
     }
+
+    this.logger.log("[CRON] Starting payment status check...");
 
     try {
       const pendingPayments: Payment[] =
         await this.getPendingPaymentsWithinTimeLimit();
 
       if (pendingPayments.length === 0) {
+        this.logger.debug("[CRON] No pending payments found to check");
         return;
       }
 
       this.logger.log(
-        `Checking status for ${pendingPayments.length} pending payment(s)`,
+        `[CRON] Checking status for ${pendingPayments.length} pending payment(s)`,
       );
 
       for (const payment of pendingPayments) {
@@ -121,9 +166,18 @@ export class PaymentStatusScheduler implements OnModuleInit {
    */
   @Cron("0 2 * * *")
   async cleanupOldPendingPayments(): Promise<void> {
+    this.logger.debug(
+      `[CRON] cleanupOldPendingPayments called - cronEnabled: ${this.cronEnabled}, cleanupEnabled: ${this.cleanupEnabled}`,
+    );
+
     if (!this.cronEnabled || !this.cleanupEnabled) {
+      this.logger.debug(
+        "[CRON] cleanupOldPendingPayments skipped - cron or cleanup is disabled",
+      );
       return;
     }
+
+    this.logger.log("[CRON] Starting payment cleanup...");
 
     try {
       const cutoffTime = new Date();

@@ -319,15 +319,11 @@ export class PaymentGatewayRegistryService implements OnModuleInit {
     gatewayId: string,
     request: PaymentRequest,
   ): Promise<PaymentResponse> {
-    this.logger.log(
-      `=== PaymentGatewayRegistry.initiatePayment called ===`,
-    );
+    this.logger.log(`=== PaymentGatewayRegistry.initiatePayment called ===`);
     this.logger.log(`Gateway ID: ${gatewayId}`);
     this.logger.log(`Request: ${JSON.stringify(request, null, 2)}`);
     // eslint-disable-next-line no-console
-    console.log(
-      `=== PaymentGatewayRegistry.initiatePayment called ===`,
-    );
+    console.log(`=== PaymentGatewayRegistry.initiatePayment called ===`);
     // eslint-disable-next-line no-console
     console.log(`Gateway ID: ${gatewayId}`);
     // eslint-disable-next-line no-console
@@ -371,9 +367,13 @@ export class PaymentGatewayRegistryService implements OnModuleInit {
       // eslint-disable-next-line no-console
       console.log(`Calling gateway.initiatePayment(...)`);
       const response = await gateway.initiatePayment(request);
-      this.logger.log(`Gateway returned response: ${JSON.stringify(response, null, 2)}`);
+      this.logger.log(
+        `Gateway returned response: ${JSON.stringify(response, null, 2)}`,
+      );
       // eslint-disable-next-line no-console
-      console.log(`Gateway returned response: ${JSON.stringify(response, null, 2)}`);
+      console.log(
+        `Gateway returned response: ${JSON.stringify(response, null, 2)}`,
+      );
       return response;
     } catch (error) {
       this.logger.error(

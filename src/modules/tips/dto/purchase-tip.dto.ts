@@ -37,7 +37,8 @@ export class PurchaseTipDto {
   currency?: string;
 
   @ApiProperty({
-    description: "Idempotency key to prevent duplicate payment requests (optional). If provided and a payment with this purchase exists, returns existing payment.",
+    description:
+      "Idempotency key to prevent duplicate payment requests (optional). If provided and a payment with this purchase exists, returns existing payment.",
     example: "550e8400-e29b-41d4-a716-446655440000",
     required: false,
   })
