@@ -169,7 +169,7 @@ export class TipsService {
     const tips = await query.getMany();
 
     // If userId is provided, check purchases for each tip
-    let purchaseMap: Map<string, boolean> = new Map();
+    const purchaseMap: Map<string, boolean> = new Map();
     if (userId) {
       const tipIds = tips.map((tip) => tip.id);
       if (tipIds.length > 0) {
@@ -179,11 +179,13 @@ export class TipsService {
             buyer: { id: userId },
             status: PurchaseStatusType.COMPLETED,
           },
-          select: ["tip"],
+          relations: ["tip"],
         });
 
         purchases.forEach((purchase) => {
-          purchaseMap.set(purchase.tip.id, true);
+          if (purchase.tip?.id) {
+            purchaseMap.set(purchase.tip.id, true);
+          }
         });
       }
     }
@@ -1821,7 +1823,7 @@ export class TipsService {
 
     const selections = await this.tipSelectionRepository.find({
       where: { tip: { id: tipId } },
-      relations: ["match"],
+      relations: ["match", "match.homeTeam", "match.awayTeam", "match.league"],
     });
 
     const response = new TipEditingResponseDto();
@@ -1867,6 +1869,43 @@ export class TipsService {
         ? parseFloat(sel.odds.toString())
         : undefined;
       selectionDto.isVoid = sel.isVoid;
+
+      // Include match details if match is loaded
+      if (sel.match) {
+        const matchDetails = {
+          id: sel.match.id,
+          matchDatetime: sel.match.matchDatetime,
+          status: sel.match.status,
+          homeTeam: {
+            id: sel.match.homeTeam.id,
+            name: sel.match.homeTeam.name,
+            shortName: sel.match.homeTeam.shortName,
+            logoUrl: sel.match.homeTeam.logoUrl,
+            country: sel.match.homeTeam.country,
+          },
+          awayTeam: {
+            id: sel.match.awayTeam.id,
+            name: sel.match.awayTeam.name,
+            shortName: sel.match.awayTeam.shortName,
+            logoUrl: sel.match.awayTeam.logoUrl,
+            country: sel.match.awayTeam.country,
+          },
+          league: sel.match.league
+            ? {
+                id: sel.match.league.id,
+                name: sel.match.league.name,
+                country: sel.match.league.country,
+                logoUrl: sel.match.league.logoUrl,
+              }
+            : undefined,
+          homeScore: sel.match.homeScore,
+          awayScore: sel.match.awayScore,
+          venue: sel.match.venue,
+          round: sel.match.round,
+        };
+        selectionDto.match = matchDetails;
+      }
+
       return selectionDto;
     });
 
@@ -1966,16 +2005,13 @@ export class TipsService {
           throw new BadRequestException("You have already purchased this tip");
         } else if (existingPurchase.status === PurchaseStatusType.PENDING) {
           // Check if there's an existing payment for this purchase (idempotency)
-          const existingPayment = await queryRunner.manager.findOne(
-            Payment,
-            {
-              where: {
-                purchaseId: existingPurchase.id,
-                type: PaymentType.TIP_PURCHASE,
-              },
-              order: { createdAt: "DESC" },
+          const existingPayment = await queryRunner.manager.findOne(Payment, {
+            where: {
+              purchaseId: existingPurchase.id,
+              type: PaymentType.TIP_PURCHASE,
             },
-          );
+            order: { createdAt: "DESC" },
+          });
 
           if (existingPayment) {
             // Return existing payment information (idempotency)
@@ -2013,8 +2049,10 @@ export class TipsService {
                 paymentMethod: existingPurchase.paymentMethod,
                 paymentGateway: existingPurchase.paymentGateway,
                 checkoutUrl: existingPayment.checkoutUrl,
-                transactionId: existingPayment.providerTransactionId || undefined,
-                message: "Payment already initiated. Returning existing payment.",
+                transactionId:
+                  existingPayment.providerTransactionId || undefined,
+                message:
+                  "Payment already initiated. Returning existing payment.",
               };
             } else if (existingPayment.status === PaymentStatus.COMPLETED) {
               // Payment completed but purchase still pending - this is unusual
@@ -2167,7 +2205,8 @@ export class TipsService {
             paymentMethod: existingPurchaseForPayment.paymentMethod,
             paymentGateway: existingPurchaseForPayment.paymentGateway,
             checkoutUrl: existingPaymentByOrder.checkoutUrl,
-            transactionId: existingPaymentByOrder.providerTransactionId || undefined,
+            transactionId:
+              existingPaymentByOrder.providerTransactionId || undefined,
             message: "Payment already initiated. Returning existing payment.",
           };
         } else if (existingPaymentByOrder.status === PaymentStatus.COMPLETED) {
@@ -2293,7 +2332,10 @@ export class TipsService {
               relations: ["purchase"],
             });
 
-            if (existingPayment && existingPayment.status === PaymentStatus.PENDING) {
+            if (
+              existingPayment &&
+              existingPayment.status === PaymentStatus.PENDING
+            ) {
               // Return existing pending payment
               this.logger.log(
                 `Duplicate payment request detected (orderNumber: ${purchaseReference}), returning existing payment ${existingPayment.id}`,
@@ -2333,10 +2375,15 @@ export class TipsService {
                 paymentMethod: existingPurchaseForPayment.paymentMethod,
                 paymentGateway: existingPurchaseForPayment.paymentGateway,
                 checkoutUrl: existingPayment.checkoutUrl,
-                transactionId: existingPayment.providerTransactionId || undefined,
-                message: "Payment already initiated. Returning existing payment.",
+                transactionId:
+                  existingPayment.providerTransactionId || undefined,
+                message:
+                  "Payment already initiated. Returning existing payment.",
               };
-            } else if (existingPayment && existingPayment.status === PaymentStatus.COMPLETED) {
+            } else if (
+              existingPayment &&
+              existingPayment.status === PaymentStatus.COMPLETED
+            ) {
               throw new BadRequestException(
                 "Payment for this order has already been completed",
               );
@@ -2377,9 +2424,7 @@ export class TipsService {
         };
 
         // Initiate payment with gateway
-        this.logger.log(
-          `=== STARTING PAYMENT INITIATION ===`,
-        );
+        this.logger.log(`=== STARTING PAYMENT INITIATION ===`);
         this.logger.log(
           `Initiating payment with gateway ${gatewayId} for purchase ${savedPurchase.id}`,
         );
@@ -2387,17 +2432,11 @@ export class TipsService {
           `Payment request: ${JSON.stringify(paymentRequest, null, 2)}`,
         );
         // eslint-disable-next-line no-console
-        console.log(
-          `=== STARTING PAYMENT INITIATION ===`,
-        );
+        console.log(`=== STARTING PAYMENT INITIATION ===`);
         // eslint-disable-next-line no-console
-        console.log(
-          `Gateway ID: ${gatewayId}`,
-        );
+        console.log(`Gateway ID: ${gatewayId}`);
         // eslint-disable-next-line no-console
-        console.log(
-          `Purchase ID: ${savedPurchase.id}`,
-        );
+        console.log(`Purchase ID: ${savedPurchase.id}`);
         // eslint-disable-next-line no-console
         console.log(
           `Payment request: ${JSON.stringify(paymentRequest, null, 2)}`,
@@ -2412,18 +2451,13 @@ export class TipsService {
           console.log(
             `Calling paymentGatewayRegistry.initiatePayment(${gatewayId}, ...)`,
           );
-          paymentResponse =
-            await this.paymentGatewayRegistry.initiatePayment(
-              gatewayId,
-              paymentRequest,
-            );
-          this.logger.log(
-            `Payment gateway registry returned response`,
+          paymentResponse = await this.paymentGatewayRegistry.initiatePayment(
+            gatewayId,
+            paymentRequest,
           );
+          this.logger.log(`Payment gateway registry returned response`);
           // eslint-disable-next-line no-console
-          console.log(
-            `Payment gateway registry returned response`,
-          );
+          console.log(`Payment gateway registry returned response`);
 
           this.logger.log(
             `Payment initiated successfully. Response: ${JSON.stringify(paymentResponse)}`,
@@ -2529,9 +2563,9 @@ export class TipsService {
         // If payment fails, update payment and purchase status to FAILED
         // Check if transaction error indicates it's aborted
         const isTransactionAborted =
-          paymentError instanceof QueryFailedError &&
-          (paymentError.driverError?.code === "25P02" ||
-            paymentError.driverError?.code === "25000") ||
+          (paymentError instanceof QueryFailedError &&
+            (paymentError.driverError?.code === "25P02" ||
+              paymentError.driverError?.code === "25000")) ||
           paymentError.message?.includes("aborted") ||
           paymentError.code === "25P02" ||
           paymentError.code === "25000";
