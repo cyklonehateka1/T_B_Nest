@@ -37,6 +37,7 @@ import { PurchaseTipDto } from "./dto/purchase-tip.dto";
 import { PurchaseTipResponseDto } from "./dto/purchase-tip-response.dto";
 import { ApiResponse as ApiResponseClass } from "../../common/dto/api-response.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { OptionalJwtAuthGuard } from "../../common/guards/optional-jwt-auth.guard";
 import { RolesGuard } from "../../modules/auth/guards/roles.guard";
 import { Roles } from "../../modules/auth/decorators/roles.decorator";
 import { UserRoleType } from "../../common/enums/user-role-type.enum";
@@ -49,10 +50,12 @@ export class TipsController {
   constructor(private readonly tipsService: TipsService) {}
 
   @Get()
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: "Get tips with search, filter, and pagination",
     description:
-      "Retrieve tips with optional search, filters, and pagination. By default returns the latest tips from top tipsters, sorted by tipster rating/success rate and then by published date. Also returns free tips count and available tips count.",
+      "Retrieve tips with optional search, filters, and pagination. By default returns the latest tips from top tipsters, sorted by tipster rating/success rate and then by published date. Also returns free tips count and available tips count. If authenticated, includes hasPurchased property for each tip.",
   })
   @ApiQuery({
     name: "keyword",
@@ -159,6 +162,7 @@ export class TipsController {
     @Query("isFree") isFree?: string | boolean,
     @Query("page") page?: number,
     @Query("size") size?: number,
+    @Request() req?: ExpressRequest & { user?: { id: string } },
   ): Promise<ApiResponseClass<TipsPageResponseDto>> {
     const pageNum = page !== undefined ? Number(page) : 0;
     const pageSize = size !== undefined ? Number(size) : 20;
@@ -177,6 +181,9 @@ export class TipsController {
       }
     }
 
+    // Get userId if user is authenticated (optional guard)
+    const userId = req?.user?.id;
+
     const response = await this.tipsService.getTips(
       keyword,
       tipsterId,
@@ -186,6 +193,7 @@ export class TipsController {
       isFreeBool,
       pageNum,
       pageSize,
+      userId,
     );
 
     return ApiResponseClass.success(response, "Tips retrieved successfully");
