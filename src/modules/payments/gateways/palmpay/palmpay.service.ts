@@ -35,16 +35,10 @@ export interface PalmpayCreateOrderRequest {
   nonceStr: string;
   orderId: string;
   amount: number;
-  currency: string;
-  notifyUrl: string;
   callBackUrl: string;
+  notifyUrl: string;
+  userMobileNo?: string;
   productType: string;
-  accessMode?: string;
-  title?: string;
-  description?: string;
-  userId?: string;
-  goodsDetails?: string;
-  splitDetail?: string;
 }
 export interface PalmpayCreateOrderResponse {
   orderNo?: string;
@@ -301,10 +295,22 @@ export class PalmpayService extends PaymentGatewayBase {
         orderNo: request.transactionId,
         currency: payment.currency,
       };
+      // Determine country code from currency for header
+      const countryCodeMap: Record<string, string> = {
+        GHS: "GH",
+        NGN: "NG",
+        KES: "KE",
+        TZS: "TZ",
+      };
+      const countryCode = payment.currency?.toUpperCase()
+        ? countryCodeMap[payment.currency.toUpperCase()] || "GH"
+        : "GH";
+
       const response = await this.makeApiRequest(
         "/api/v2/payment/merchant/order/queryStatus",
         queryStatusRequest,
         "POST",
+        countryCode,
       );
       if (!response.success) {
         const errorMsg = response.message || "Palmpay status check failed";
@@ -747,23 +753,26 @@ export class PalmpayService extends PaymentGatewayBase {
       ? `${this.frontendBaseUrl}/tips/${request.additionalData.tipId}/purchase/success?purchaseId=${purchaseId}`
       : `${this.frontendBaseUrl}/orders`;
 
+    // Build request matching the exact curl format provided
+    // Use purchaseId as orderId (from additionalData if available, otherwise orderNumber)
+    const orderId = request.additionalData?.purchaseId || request.orderNumber;
+
+    // Extract user mobile number from additionalData if available
+    const userMobileNo =
+      request.additionalData?.userMobileNo ||
+      request.additionalData?.phoneNumber ||
+      request.additionalData?.accountNumber;
+
     const palmpayRequest: PalmpayCreateOrderRequest = {
       requestTime: Date.now(),
-      version: "V1.1",
+      version: "V2.0",
       nonceStr: generateNonce(),
-      orderId: request.orderNumber,
+      orderId: orderId,
       amount: amountInCents,
-      currency: request.currency,
-      notifyUrl: `${appUrl}/webhooks/palmpay/mobile-money`,
       callBackUrl: callBackUrl,
+      notifyUrl: `${appUrl}/webhooks/palmpay/mobile-money`,
       productType: "mmo",
-      accessMode: "redirect",
-      title: isTipPurchase
-        ? `Payment for ${tipTitle}`
-        : `Payment for order ${request.orderNumber}`,
-      description: isTipPurchase
-        ? `Purchase tip/prediction: ${tipTitle}`
-        : `Payment for order ${request.orderNumber}`,
+      ...(userMobileNo && { userMobileNo: userMobileNo }),
     };
     try {
       // Log request details
@@ -780,9 +789,22 @@ export class PalmpayService extends PaymentGatewayBase {
       // eslint-disable-next-line no-console
       console.log("Request Payload:", JSON.stringify(palmpayRequest, null, 2));
 
+      // Determine country code from currency for header (not included in request body)
+      const countryCodeMap: Record<string, string> = {
+        GHS: "GH",
+        NGN: "NG",
+        KES: "KE",
+        TZS: "TZ",
+      };
+      const countryCode = request.currency?.toUpperCase()
+        ? countryCodeMap[request.currency.toUpperCase()] || "GH"
+        : "GH";
+
       const response = await this.makeApiRequest(
         "/api/v2/payment/merchant/createorder",
         palmpayRequest,
+        "POST",
+        countryCode,
       );
 
       // Log response details
@@ -1297,6 +1319,7 @@ export class PalmpayService extends PaymentGatewayBase {
     endpoint: string,
     data: any = {},
     method: "GET" | "POST" = "POST",
+    countryCode?: string,
   ): Promise<PalmpayApiResponse> {
     try {
       // Build query string for signature
@@ -1346,20 +1369,25 @@ export class PalmpayService extends PaymentGatewayBase {
       this.logger.log(`Generated Signature: ${signature}`);
       // eslint-disable-next-line no-console
       console.log(`Generated Signature: ${signature}`);
-      const countryCodeMap: Record<string, string> = {
-        GHS: "GH",
-        NGN: "NG",
-        KES: "KE",
-        TZS: "TZ",
-      };
-      const countryCode = data.currency?.toUpperCase()
-        ? countryCodeMap[data.currency.toUpperCase()] || "GH"
-        : "GH";
+
+      // Determine country code: use provided parameter or fallback to deriving from currency in data
+      let finalCountryCode = countryCode;
+      if (!finalCountryCode) {
+        const countryCodeMap: Record<string, string> = {
+          GHS: "GH",
+          NGN: "NG",
+          KES: "KE",
+          TZS: "TZ",
+        };
+        finalCountryCode = data.currency?.toUpperCase()
+          ? countryCodeMap[data.currency.toUpperCase()] || "GH"
+          : "GH";
+      }
       const config = {
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
-          CountryCode: countryCode,
+          countryCode: finalCountryCode, // lowercase to match curl example
           Authorization: `Bearer ${this.appId}`,
           Signature: signature,
         },

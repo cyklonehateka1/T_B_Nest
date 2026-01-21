@@ -184,7 +184,7 @@ export class Payment {
   @IsString()
   providerPaymentId?: string;
 
-  @Column({ nullable: true })
+  @Column({ type: "text", nullable: true })
   @IsOptional()
   @IsString()
   checkoutUrl?: string;
