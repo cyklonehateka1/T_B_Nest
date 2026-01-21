@@ -59,4 +59,20 @@ export class TipResponseDto {
 
   @ApiProperty({ type: TipsterBasicInfoDto, required: false })
   tipster?: TipsterBasicInfoDto | null;
+
+  @ApiProperty({
+    example: false,
+    description:
+      "Whether the current user has purchased this tip. Only included if user is authenticated.",
+    required: false,
+  })
+  hasPurchased?: boolean;
+
+  @ApiProperty({
+    example: false,
+    description:
+      "Whether the current user is the creator of this tip. Only included if user is authenticated.",
+    required: false,
+  })
+  isCreator?: boolean;
 }

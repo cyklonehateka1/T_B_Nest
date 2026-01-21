@@ -102,6 +102,7 @@ export class TipsService {
     isFree?: boolean,
     page: number = 0,
     size: number = 20,
+    userId?: string,
   ): Promise<TipsPageResponseDto> {
     this.logger.debug(
       `Fetching tips with filters: keyword=${keyword}, tipsterId=${tipsterId}, minPrice=${minPrice}, maxPrice=${maxPrice}, status=${status}, isFree=${isFree}, page=${page}, size=${size}`,
@@ -167,7 +168,29 @@ export class TipsService {
 
     const tips = await query.getMany();
 
-    const tipResponses = tips.map((tip) => this.mapToResponse(tip));
+    // If userId is provided, check purchases for each tip
+    let purchaseMap: Map<string, boolean> = new Map();
+    if (userId) {
+      const tipIds = tips.map((tip) => tip.id);
+      if (tipIds.length > 0) {
+        const purchases = await this.purchaseRepository.find({
+          where: {
+            tip: { id: In(tipIds) },
+            buyer: { id: userId },
+            status: PurchaseStatusType.COMPLETED,
+          },
+          select: ["tip"],
+        });
+
+        purchases.forEach((purchase) => {
+          purchaseMap.set(purchase.tip.id, true);
+        });
+      }
+    }
+
+    const tipResponses = tips.map((tip) =>
+      this.mapToResponse(tip, userId, purchaseMap.get(tip.id) || false),
+    );
 
     const freeTipsCount = await this.countFreeTips();
 
@@ -189,7 +212,11 @@ export class TipsService {
     return response;
   }
 
-  private mapToResponse(tip: Tip): TipResponseDto {
+  private mapToResponse(
+    tip: Tip,
+    userId?: string,
+    hasPurchased: boolean = false,
+  ): TipResponseDto {
     const response = new TipResponseDto();
     response.id = tip.id;
     response.title = tip.title;
@@ -223,6 +250,17 @@ export class TipsService {
       }
 
       response.tipster = tipsterInfo;
+    }
+
+    // Include hasPurchased and isCreator if userId is provided
+    if (userId !== undefined) {
+      // Check if user is the creator
+      const isCreator = tip.tipster?.user?.id === userId;
+      // Set isCreator flag
+      response.isCreator = isCreator;
+      // If creator, they have "access" (but hasPurchased is false for semantic clarity)
+      // If not creator, use the hasPurchased flag passed in
+      response.hasPurchased = isCreator ? false : hasPurchased;
     }
 
     return response;
