@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { TipSelection } from "../../common/entities/tip-selection.entity";
 import { MatchData } from "../../common/entities/match-data.entity";
@@ -25,7 +25,7 @@ import { PaymentsModule } from "../payments/payments.module";
       Payment,
       AppSettings,
     ]),
-    PaymentsModule,
+    forwardRef(() => PaymentsModule),
   ],
   providers: [
     PredictionEvaluationService,

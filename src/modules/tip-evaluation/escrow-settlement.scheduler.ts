@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit, Inject, forwardRef } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, DataSource } from "typeorm";
@@ -35,6 +35,7 @@ export class EscrowSettlementScheduler implements OnModuleInit {
     private readonly appSettingsRepository: Repository<AppSettings>,
     private readonly dataSource: DataSource,
     private readonly configService: ConfigService,
+    @Inject(forwardRef(() => PalmpayService))
     private readonly palmpayService: PalmpayService,
   ) {
     this.cronEnabled =

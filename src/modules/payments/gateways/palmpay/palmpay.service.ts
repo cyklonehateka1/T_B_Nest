@@ -3,6 +3,9 @@ import {
   Logger,
   BadRequestException,
   NotFoundException,
+  Optional,
+  Inject,
+  forwardRef,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -195,8 +198,10 @@ export class PalmpayService extends PaymentGatewayBase {
     private readonly paymentResponseValidatorService: PaymentResponseValidatorService,
     private readonly emailService: EmailService,
     private readonly webhookService: WebhookService,
-    private readonly escrowService: EscrowService,
     private readonly dataSource: DataSource,
+    @Optional()
+    @Inject(forwardRef(() => EscrowService))
+    private readonly escrowService?: EscrowService,
   ) {
     super(new Logger(PalmpayService.name));
     const appId = this.configService.get<string>("PALMPAY_APP_ID");
@@ -712,21 +717,27 @@ export class PalmpayService extends PaymentGatewayBase {
             
             // Create escrow for completed purchase (outside transaction to avoid circular dependency)
             // We'll do this after the transaction commits
-            const purchaseId = payment.purchase.id;
-            setImmediate(async () => {
-              try {
-                await this.escrowService.createEscrowForPurchase(purchaseId);
-                this.logger.log(
-                  `Created escrow for purchase ${purchaseId} after payment completion via webhook`,
-                );
-              } catch (escrowError) {
-                // Log error but don't fail the webhook processing
-                this.logger.error(
-                  `Failed to create escrow for purchase ${purchaseId}: ${escrowError.message}`,
-                  escrowError.stack,
-                );
-              }
-            });
+            if (this.escrowService) {
+              const purchaseId = payment.purchase.id;
+              setImmediate(async () => {
+                try {
+                  await this.escrowService.createEscrowForPurchase(purchaseId);
+                  this.logger.log(
+                    `Created escrow for purchase ${purchaseId} after payment completion via webhook`,
+                  );
+                } catch (escrowError) {
+                  // Log error but don't fail the webhook processing
+                  this.logger.error(
+                    `Failed to create escrow for purchase ${purchaseId}: ${escrowError.message}`,
+                    escrowError.stack,
+                  );
+                }
+              });
+            } else {
+              this.logger.warn(
+                `EscrowService not available - escrow will not be created for purchase ${payment.purchase.id}`,
+              );
+            }
           } else if (webhookPayload.orderStatus === 3) {
             // Payment failed
             payment.purchase.status = PurchaseStatusType.FAILED;
