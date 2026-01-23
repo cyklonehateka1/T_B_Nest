@@ -24,7 +24,24 @@ export class PredictionEvaluationService {
     selection: TipSelection,
     match: MatchData,
   ): EvaluationResult {
-    // Check if match is finished and has scores
+    // Handle void cases first (cancelled/postponed matches are always void)
+    if (match.status === MatchStatusType.cancelled) {
+      return {
+        isCorrect: null,
+        isVoid: true,
+        reason: "Match was cancelled",
+      };
+    }
+
+    if (match.status === MatchStatusType.postponed) {
+      return {
+        isCorrect: null,
+        isVoid: true,
+        reason: "Match was postponed",
+      };
+    }
+
+    // Check if match is finished
     if (match.status !== MatchStatusType.finished) {
       return {
         isCorrect: null,
@@ -47,23 +64,6 @@ export class PredictionEvaluationService {
       };
     }
 
-    // Handle void cases
-    if (match.status === MatchStatusType.cancelled) {
-      return {
-        isCorrect: null,
-        isVoid: true,
-        reason: "Match was cancelled",
-      };
-    }
-
-    if (match.status === MatchStatusType.postponed) {
-      return {
-        isCorrect: null,
-        isVoid: true,
-        reason: "Match was postponed",
-      };
-    }
-
     // Evaluate based on prediction type
     try {
       switch (selection.predictionType) {
@@ -83,15 +83,15 @@ export class PredictionEvaluationService {
           return this.evaluateFirstGoalScorer(selection, match);
         case PredictionType.ANY_OTHER:
           return this.evaluateAnyOther(selection, match);
-        default:
-          this.logger.warn(
-            `Unknown prediction type: ${selection.predictionType}`,
-          );
+        default: {
+          const unknownType: string = selection.predictionType as string;
+          this.logger.warn(`Unknown prediction type: ${unknownType}`);
           return {
             isCorrect: null,
             isVoid: true,
-            reason: `Unknown prediction type: ${selection.predictionType}`,
+            reason: `Unknown prediction type: ${unknownType}`,
           };
+        }
       }
     } catch (error) {
       this.logger.error(
@@ -188,7 +188,8 @@ export class PredictionEvaluationService {
     const predictionValue = selection.predictionValue.toLowerCase();
 
     const bothScored = homeScore > 0 && awayScore > 0;
-    const predictedBothScored = predictionValue === "btts_yes" || predictionValue === "yes";
+    const predictedBothScored =
+      predictionValue === "btts_yes" || predictionValue === "yes";
 
     const isCorrect = bothScored === predictedBothScored;
 
@@ -336,7 +337,8 @@ export class PredictionEvaluationService {
     return {
       isCorrect: null,
       isVoid: true,
-      reason: "First goal scorer evaluation requires match event data (not yet implemented)",
+      reason:
+        "First goal scorer evaluation requires match event data (not yet implemented)",
     };
   }
 

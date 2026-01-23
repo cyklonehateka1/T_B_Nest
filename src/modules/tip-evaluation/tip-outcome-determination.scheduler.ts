@@ -9,6 +9,12 @@ import { Purchase } from "../../common/entities/purchase.entity";
 import { TipStatusType } from "../../common/enums/tip-status-type.enum";
 import { MatchStatusType } from "../../common/enums/match-status-type.enum";
 
+interface DeterminationStats {
+  totalPending: number;
+  readyForDetermination: number;
+  waitingForEvaluations: number;
+}
+
 @Injectable()
 export class TipOutcomeDeterminationScheduler implements OnModuleInit {
   private readonly logger = new Logger(TipOutcomeDeterminationScheduler.name);
@@ -218,11 +224,7 @@ export class TipOutcomeDeterminationScheduler implements OnModuleInit {
   /**
    * Get statistics about pending tips (for monitoring/debugging)
    */
-  async getDeterminationStats(): Promise<{
-    totalPending: number;
-    readyForDetermination: number;
-    waitingForEvaluations: number;
-  } {
+  async getDeterminationStats(): Promise<DeterminationStats> {
     const totalPending = await this.tipRepository.count({
       where: {
         status: TipStatusType.PENDING,

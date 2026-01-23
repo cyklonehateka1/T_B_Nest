@@ -8,6 +8,12 @@ import { MatchData } from "../../common/entities/match-data.entity";
 import { MatchStatusType } from "../../common/enums/match-status-type.enum";
 import { PredictionEvaluationService } from "./prediction-evaluation.service";
 
+interface EvaluationStats {
+  totalUnevaluated: number;
+  readyForEvaluation: number;
+  waitingForMatchResults: number;
+}
+
 @Injectable()
 export class TipSelectionEvaluationScheduler implements OnModuleInit {
   private readonly logger = new Logger(TipSelectionEvaluationScheduler.name);
@@ -178,11 +184,7 @@ export class TipSelectionEvaluationScheduler implements OnModuleInit {
   /**
    * Get statistics about unevaluated selections (for monitoring/debugging)
    */
-  async getEvaluationStats(): Promise<{
-    totalUnevaluated: number;
-    readyForEvaluation: number;
-    waitingForMatchResults: number;
-  } {
+  async getEvaluationStats(): Promise<EvaluationStats> {
     const allUnevaluated = await this.tipSelectionRepository.count({
       where: {
         isCorrect: IsNull(),

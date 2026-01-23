@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit, Inject, forwardRef } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, LessThan, MoreThan } from "typeorm";
@@ -36,6 +36,7 @@ export class PaymentStatusScheduler implements OnModuleInit {
     private readonly paymentGatewayRegistryService: PaymentGatewayRegistryService,
     private readonly emailService: EmailService,
     private readonly webhookService: WebhookService,
+    @Inject(forwardRef(() => EscrowService))
     private readonly escrowService: EscrowService,
     private readonly configService: ConfigService,
   ) {

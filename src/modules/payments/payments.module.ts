@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { Payment } from "../../common/entities/payment.entity";
 import { Purchase } from "../../common/entities/purchase.entity";
@@ -10,6 +10,7 @@ import { PalmpayService } from "./gateways/palmpay/palmpay.service";
 import { PaymentResponseValidatorService } from "../../common/services/payment-response-validator.service";
 import { WebhookService } from "../../common/services/webhook.service";
 import { EmailModule } from "../email/email.module";
+import { TipEvaluationModule } from "../tip-evaluation/tip-evaluation.module";
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { EmailModule } from "../email/email.module";
       GlobalPaymentMethod,
     ]),
     EmailModule,
+    forwardRef(() => TipEvaluationModule),
   ],
   providers: [
     PaymentStatusScheduler,
