@@ -13,6 +13,7 @@ import { PaymentGatewayRegistryService } from "./gateways/payment-gateway-regist
 import { EmailService } from "../email/email.service";
 import { WebhookService } from "../../common/services/webhook.service";
 import { PaymentStatusRequest } from "./gateways/payment-gateway-base";
+import { EscrowService } from "../tip-evaluation/escrow.service";
 
 @Injectable()
 export class PaymentStatusScheduler implements OnModuleInit {
@@ -35,6 +36,7 @@ export class PaymentStatusScheduler implements OnModuleInit {
     private readonly paymentGatewayRegistryService: PaymentGatewayRegistryService,
     private readonly emailService: EmailService,
     private readonly webhookService: WebhookService,
+    private readonly escrowService: EscrowService,
     private readonly configService: ConfigService,
   ) {
     this.cronEnabled =
@@ -367,6 +369,20 @@ export class PaymentStatusScheduler implements OnModuleInit {
         if (purchase && purchase.status !== PurchaseStatusType.COMPLETED) {
           purchase.status = PurchaseStatusType.COMPLETED;
           await this.purchaseRepository.save(purchase);
+
+          // Create escrow for completed purchase
+          try {
+            await this.escrowService.createEscrowForPurchase(purchase.id);
+            this.logger.log(
+              `Created escrow for purchase ${purchase.id} after payment completion`,
+            );
+          } catch (escrowError) {
+            // Log error but don't fail the payment completion
+            this.logger.error(
+              `Failed to create escrow for purchase ${purchase.id}: ${escrowError.message}`,
+              escrowError.stack,
+            );
+          }
         }
       }
 
