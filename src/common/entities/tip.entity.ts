@@ -24,22 +24,29 @@ import { TipStatusType } from "../enums/tip-status-type.enum";
 export class Tip {
   @PrimaryGeneratedColumn("uuid")
   id: string;
+
   @ManyToOne(() => Tipster, { nullable: false })
   @JoinColumn({
     name: "tipster_id",
     foreignKeyConstraintName: "fk_tips_tipster",
   })
   tipster: Tipster;
+
   @OneToMany(() => TipSelection, (selection) => selection.tip)
   selections?: TipSelection[];
+
   @Column({ name: "is_ai", type: "boolean", nullable: false, default: false })
   isAi: boolean;
+
   @Column({ type: "varchar", length: 255, nullable: false })
   title: string;
+
   @Column({ type: "text", nullable: true })
   description?: string;
+
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: false })
   price: number;
+
   @Column({
     name: "total_odds",
     type: "decimal",
@@ -48,6 +55,7 @@ export class Tip {
     nullable: true,
   })
   totalOdds?: number;
+
   @Column({
     type: "enum",
     enum: TipStatusType,
@@ -56,6 +64,7 @@ export class Tip {
     default: TipStatusType.PENDING,
   })
   status: TipStatusType;
+
   @Column({
     name: "is_published",
     type: "boolean",
@@ -63,6 +72,7 @@ export class Tip {
     default: false,
   })
   isPublished: boolean;
+
   @Column({
     name: "purchases_count",
     type: "integer",
@@ -70,6 +80,7 @@ export class Tip {
     default: 0,
   })
   purchasesCount: number;
+
   @Column({
     name: "total_revenue",
     type: "decimal",
@@ -79,12 +90,16 @@ export class Tip {
     default: 0,
   })
   totalRevenue: number;
+
   @Column({ name: "published_at", type: "timestamptz", nullable: true })
   publishedAt?: Date;
+
   @Column({ name: "earliest_match_date", type: "timestamptz", nullable: true })
   earliestMatchDate?: Date;
+
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
+
   @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt: Date;
 }

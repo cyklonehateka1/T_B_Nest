@@ -28,6 +28,6 @@ import { EmailModule } from "../email/email.module";
     PaymentResponseValidatorService,
     WebhookService,
   ],
-  exports: [PaymentStatusScheduler],
+  exports: [PaymentStatusScheduler, PalmpayService],
 })
 export class PaymentsModule {}

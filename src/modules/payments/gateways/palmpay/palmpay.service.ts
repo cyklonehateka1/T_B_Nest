@@ -25,6 +25,7 @@ import {
 import { PaymentResponseValidatorService } from "../../../../common/services/payment-response-validator.service";
 import { EmailService } from "../../../email/email.service";
 import { WebhookService } from "../../../../common/services/webhook.service";
+import { EscrowService } from "../../../tip-evaluation/escrow.service";
 import { Payment } from "../../../../common/entities/payment.entity";
 import { Purchase } from "../../../../common/entities/purchase.entity";
 import { PurchaseStatusType } from "../../../../common/enums/purchase-status-type.enum";
@@ -139,6 +140,44 @@ export interface PalmpayQueryBankListResponse {
   respMsg: string; // Response message (e.g., "success")
   data?: PalmpayBankInfo | PalmpayBankInfo[]; // Bank info or array of bank info
 }
+
+export interface PalmpayPayoutRequest {
+  requestTime: number; // Timestamp in milliseconds
+  version: string; // API version (e.g., "V1.1")
+  nonceStr: string; // Random string for request uniqueness
+  orderId: string; // Merchant's order number (payout reference)
+  title?: string; // Order title (optional)
+  description?: string; // Order description (optional)
+  payeeName?: string; // Name of the payee (optional, default: "unknown")
+  payeeBankCode?: string; // Bank or MMO code (required except TZ)
+  payeeBankAccNo: string; // Bank account or MoMo account (required, numeric only)
+  payeePhoneNo?: string; // Payee phone number for Ghana SMS (optional, with country code)
+  amount: number; // Transaction amount in cents/minimum unit
+  currency: string; // Currency (GHS/NGN/TZS/KES)
+  notifyUrl: string; // Webhook URL for payment notifications
+  remark: string; // Remark (required)
+}
+
+export interface PalmpayPayoutResponse {
+  currency?: string; // Currency
+  amount?: number; // Order amount (minimum unit) only when orderStatus = 2
+  fee?: {
+    fee: number; // Total fee amount (minimum unit)
+    vat?: number; // VAT amount (optional)
+  }; // Only when orderStatus = 1 or 2
+  orderNo?: string; // The order number responded by Palmpay
+  orderId?: string; // Merchant's original order number
+  orderStatus?: number; // Order Status (0: unpaid, 1: paying, 2: success, 3: fail, 4: close)
+  sessionId?: string; // Channel Response Parameters
+  message?: string; // Order status description
+  errorMsg?: string; // Error message
+}
+
+export interface PalmpayPayoutApiResponse {
+  respCode: string; // Response code (e.g., "00000000" for success)
+  respMsg: string; // Response message (e.g., "success")
+  data?: PalmpayPayoutResponse;
+}
 @Injectable()
 export class PalmpayService extends PaymentGatewayBase {
   protected readonly logger = new Logger(PalmpayService.name);
@@ -156,6 +195,7 @@ export class PalmpayService extends PaymentGatewayBase {
     private readonly paymentResponseValidatorService: PaymentResponseValidatorService,
     private readonly emailService: EmailService,
     private readonly webhookService: WebhookService,
+    private readonly escrowService: EscrowService,
     private readonly dataSource: DataSource,
   ) {
     super(new Logger(PalmpayService.name));
@@ -669,6 +709,24 @@ export class PalmpayService extends PaymentGatewayBase {
             // Payment successful - mark purchase as completed
             payment.purchase.status = PurchaseStatusType.COMPLETED;
             await queryRunner.manager.save(Purchase, payment.purchase);
+            
+            // Create escrow for completed purchase (outside transaction to avoid circular dependency)
+            // We'll do this after the transaction commits
+            const purchaseId = payment.purchase.id;
+            setImmediate(async () => {
+              try {
+                await this.escrowService.createEscrowForPurchase(purchaseId);
+                this.logger.log(
+                  `Created escrow for purchase ${purchaseId} after payment completion via webhook`,
+                );
+              } catch (escrowError) {
+                // Log error but don't fail the webhook processing
+                this.logger.error(
+                  `Failed to create escrow for purchase ${purchaseId}: ${escrowError.message}`,
+                  escrowError.stack,
+                );
+              }
+            });
           } else if (webhookPayload.orderStatus === 3) {
             // Payment failed
             payment.purchase.status = PurchaseStatusType.FAILED;
@@ -1594,6 +1652,224 @@ export class PalmpayService extends PaymentGatewayBase {
       this.logger.error(
         `Failed to send admin webhook for completed payment: ${error.message}`,
       );
+    }
+  }
+
+  /**
+   * Initiate a payout to a user's bank account
+   * Used for tipster payouts and buyer refunds
+   */
+  async initiatePayout(params: {
+    orderId: string;
+    amount: number;
+    currency: string;
+    recipient: {
+      accountNumber: string;
+      accountName: string;
+      bankCode?: string;
+      bankName?: string;
+      phoneNumber?: string;
+    };
+    description: string;
+    notifyUrl: string;
+  }): Promise<{
+    success: boolean;
+    orderNo?: string;
+    message: string;
+    error?: string;
+  }> {
+    try {
+      // Validate currency is supported
+      const supportedCurrencies = ["GHS", "NGN", "TZS", "KES"];
+      if (!supportedCurrencies.includes(params.currency.toUpperCase())) {
+        return {
+          success: false,
+          message: `Currency ${params.currency} is not supported for Palmpay payouts`,
+          error: "UNSUPPORTED_CURRENCY",
+        };
+      }
+
+      // Validate account number
+      if (!params.recipient.accountNumber) {
+        return {
+          success: false,
+          message: "Account number is required for payout",
+          error: "MISSING_ACCOUNT_NUMBER",
+        };
+      }
+
+      // Get bank code - use provided or query by bank name
+      let payeeBankCode: string | undefined = params.recipient.bankCode;
+
+      if (!payeeBankCode && params.recipient.bankName) {
+        // Try to find bank code by bank name
+        const bankListResult = await this.queryBankList(params.currency);
+        if (bankListResult.success && bankListResult.banks) {
+          const normalizedSearchName = params.recipient.bankName
+            .toUpperCase()
+            .trim();
+          const bank = bankListResult.banks.find(
+            (b) =>
+              b.bankName.toUpperCase().trim() === normalizedSearchName ||
+              b.bankName.toUpperCase().includes(normalizedSearchName) ||
+              normalizedSearchName.includes(b.bankName.toUpperCase().trim()),
+          );
+          if (bank) {
+            payeeBankCode = bank.bankCode;
+            this.logger.log(
+              `Found bank code ${payeeBankCode} for bank ${params.recipient.bankName}`,
+            );
+          }
+        }
+      }
+
+      // TZ (Tanzania) doesn't require bank code, others do
+      if (!payeeBankCode && params.currency.toUpperCase() !== "TZS") {
+        return {
+          success: false,
+          message: `Bank/MMO code is required for ${params.currency} payouts. Please ensure the recipient has configured bankCode.`,
+          error: "MISSING_BANK_CODE",
+        };
+      }
+
+      // Convert amount to cents (Palmpay expects amount in cents)
+      const amountInCents = Math.round(params.amount * 100);
+
+      // Generate nonce string
+      const generateNonce = (length = 32): string => {
+        const chars =
+          "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        let result = "";
+        for (let i = 0; i < length; i++) {
+          result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+      };
+      const nonceStr = generateNonce();
+
+      // Build payout request
+      const payoutRequest: PalmpayPayoutRequest = {
+        requestTime: Date.now(),
+        version: "V1.1",
+        nonceStr,
+        orderId: params.orderId,
+        payeeBankCode: payeeBankCode,
+        payeeBankAccNo: params.recipient.accountNumber.replace(/\D/g, ""), // Remove non-numeric characters
+        payeeName: params.recipient.accountName || "unknown",
+        payeePhoneNo: params.recipient.phoneNumber,
+        amount: amountInCents,
+        currency: params.currency.toUpperCase(),
+        notifyUrl: params.notifyUrl,
+        remark: params.description,
+      };
+
+      // Determine country code from currency
+      const countryCodeMap: Record<string, string> = {
+        GHS: "GH",
+        NGN: "NG",
+        KES: "KE",
+        TZS: "TZ",
+      };
+      const countryCode =
+        countryCodeMap[params.currency.toUpperCase()] || "GH";
+
+      this.logger.log("Initiating Palmpay payout:", {
+        orderId: params.orderId,
+        amount: params.amount,
+        currency: params.currency,
+        countryCode,
+        accountNumber: params.recipient.accountNumber.replace(/\D/g, ""),
+        bankCode: payeeBankCode,
+      });
+
+      // Make API request
+      const response = await this.makeApiRequest(
+        "/api/v2/merchant/payment/payout",
+        payoutRequest,
+        "POST",
+        countryCode,
+      );
+
+      if (!response.success) {
+        const errorMsg =
+          response.message || "Palmpay payout API request failed";
+        this.logger.error("Palmpay payout API request failed:", {
+          orderId: params.orderId,
+          error: response.error,
+          message: errorMsg,
+        });
+        return {
+          success: false,
+          message: errorMsg,
+          error: response.error || "PAYOUT_FAILED",
+        };
+      }
+
+      // Parse response
+      const apiResponse = response.data as PalmpayPayoutApiResponse;
+
+      if (!apiResponse) {
+        return {
+          success: false,
+          message: "Empty response from Palmpay API",
+          error: "EMPTY_RESPONSE",
+        };
+      }
+
+      // Check response code
+      if (
+        apiResponse.respCode &&
+        apiResponse.respCode !== "00000" &&
+        apiResponse.respCode !== "00000000"
+      ) {
+        const errorMsg =
+          apiResponse.respMsg || `Palmpay API error: ${apiResponse.respCode}`;
+        this.logger.error("Palmpay payout API returned an error:", {
+          orderId: params.orderId,
+          respCode: apiResponse.respCode,
+          respMsg: apiResponse.respMsg,
+        });
+        return {
+          success: false,
+          message: errorMsg,
+          error: apiResponse.respCode,
+        };
+      }
+
+      // Get order number from response
+      const orderNo = apiResponse.data?.orderNo;
+
+      if (!orderNo) {
+        this.logger.error("Palmpay payout orderNo is missing:", {
+          orderId: params.orderId,
+          response: apiResponse,
+        });
+        return {
+          success: false,
+          message: "Palmpay API did not return a valid order number for payout",
+          error: "MISSING_ORDER_NO",
+        };
+      }
+
+      this.logger.log(
+        `Payout initiated successfully - OrderNo: ${orderNo}, OrderId: ${params.orderId}`,
+      );
+
+      return {
+        success: true,
+        orderNo,
+        message: "Payout initiated successfully",
+      };
+    } catch (error) {
+      this.logger.error("Palmpay payout initiation failed:", {
+        orderId: params.orderId,
+        error: error.message,
+      });
+      return {
+        success: false,
+        message: error.message || "Payout initiation failed",
+        error: "PAYOUT_ERROR",
+      };
     }
   }
 }
