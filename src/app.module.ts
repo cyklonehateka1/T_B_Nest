@@ -15,6 +15,7 @@ import { AppSettingsModule } from "./modules/app-settings/app-settings.module";
 import { CountrySettingsModule } from "./modules/country-settings/country-settings.module";
 import { PaymentsModule } from "./modules/payments/payments.module";
 import { TipEvaluationModule } from "./modules/tip-evaluation/tip-evaluation.module";
+import { AiTipGenerationModule } from "./modules/ai-tip-generation/ai-tip-generation.module";
 import { AuditLog } from "./common/entities/audit-log.entity";
 import { UserInvite } from "./common/entities/user-invite.entity";
 import { TemporarySession } from "./common/entities/temporary-session.entity";
@@ -49,6 +50,13 @@ import { TipsterApplication } from "./common/entities/tipster-application.entity
 import { UserRole } from "./common/entities/user-role.entity";
 import { PlatformSetting } from "./common/entities/platform-setting.entity";
 import { AppSettings } from "./common/entities/app-settings.entity";
+import { TeamStatistics } from "./common/entities/team-statistics.entity";
+import { TeamHeadToHead } from "./common/entities/team-head-to-head.entity";
+import { DataMaturityScore } from "./common/entities/data-maturity-score.entity";
+import { TeamImportanceRating } from "./common/entities/team-importance-rating.entity";
+import { MatchPredictabilityScore } from "./common/entities/match-predictability-score.entity";
+import { CompetitionConfiguration } from "./common/entities/competition-configuration.entity";
+import { AiTipGenerationQueue } from "./common/entities/ai-tip-generation-queue.entity";
 import { RateLimitingService } from "./common/services/rate-limiting.service";
 import { EnvironmentValidationService } from "./common/services/environment-validation.service";
 @Module({
@@ -109,6 +117,13 @@ import { EnvironmentValidationService } from "./common/services/environment-vali
             UserRole,
             PlatformSetting,
             AppSettings,
+            TeamStatistics,
+            TeamHeadToHead,
+            DataMaturityScore,
+            TeamImportanceRating,
+            MatchPredictabilityScore,
+            CompetitionConfiguration,
+            AiTipGenerationQueue,
           ],
         };
       },
@@ -124,6 +139,7 @@ import { EnvironmentValidationService } from "./common/services/environment-vali
     CountrySettingsModule,
     PaymentsModule,
     TipEvaluationModule,
+    AiTipGenerationModule,
   ],
   controllers: [AppController],
   providers: [AppService, RateLimitingService, EnvironmentValidationService],
